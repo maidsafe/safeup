@@ -1,2 +1,3 @@
 # safeup
-Install and update safe-related components
+
+Install and update safe-related components.
