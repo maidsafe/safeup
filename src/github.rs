@@ -1,3 +1,11 @@
+// Copyright 2023 MaidSafe.net limited.
+//
+// This SAFE Network Software is licensed to you under The General Public License (GPL), version 3.
+// Unless required by applicable law or agreed to in writing, the SAFE Network Software distributed
+// under the GPL Licence is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied. Please review the Licences for the specific language governing
+// permissions and limitations relating to use of the SAFE Network Software.
+
 use crate::install::AssetType;
 use color_eyre::{eyre::eyre, Result};
 use reqwest::Client;
@@ -49,11 +57,13 @@ impl GithubReleaseRepository {
             .send()
             .await?;
         let body = response.text().await?;
+
         let json: Value = serde_json::from_str(&body)?;
         let tag_name = json["tag_name"]
             .as_str()
             .ok_or_else(|| eyre!("Response body does not contain 'tag_name' value"))?;
         let version = self.get_version_from_tag_name(&asset_type, tag_name)?;
+
         let asset_name = match asset_type {
             AssetType::Client => format!("sn_cli-{version}-{platform}.tar.gz"),
             AssetType::Node => {
@@ -68,6 +78,7 @@ impl GithubReleaseRepository {
             AssetType::Client => format!("Release has no client asset for platform {platform}"),
             AssetType::Node => format!("Release has no node asset for platform {platform}"),
         };
+
         Err(eyre!(msg))
     }
 
