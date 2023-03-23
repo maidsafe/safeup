@@ -65,9 +65,9 @@ impl GithubReleaseRepository {
         let version = self.get_version_from_tag_name(&asset_type, tag_name)?;
 
         let asset_name = match asset_type {
-            AssetType::Client => format!("sn_cli-{version}-{platform}.tar.gz"),
+            AssetType::Client => format!("safe-{version}-{platform}.tar.gz"),
             AssetType::Node => {
-                format!("sn_node-{version}-{platform}.tar.gz")
+                format!("safenode-{version}-{platform}.tar.gz")
             }
         };
         if self.release_has_asset(&json, &asset_name)? {
@@ -75,8 +75,12 @@ impl GithubReleaseRepository {
         }
 
         let msg = match asset_type {
-            AssetType::Client => format!("Release has no client asset for platform {platform}"),
-            AssetType::Node => format!("Release has no node asset for platform {platform}"),
+            AssetType::Client => {
+                format!("Release v{version} has no client asset for platform {platform}")
+            }
+            AssetType::Node => {
+                format!("Release v{version} has no node asset for platform {platform}")
+            }
         };
 
         Err(eyre!(msg))
@@ -99,10 +103,19 @@ impl GithubReleaseRepository {
     fn get_version_from_tag_name(&self, asset_type: &AssetType, tag_name: &str) -> Result<String> {
         let mut parts = tag_name.split('-');
         let version = match asset_type {
-            AssetType::Client => parts
-                .last()
-                .ok_or_else(|| eyre!("Could not parse version from tag_name"))?
-                .to_string(),
+            AssetType::Client => {
+                parts.next();
+                parts.next();
+                parts.next();
+                parts.next();
+                parts.next();
+                parts.next();
+                parts.next();
+                parts
+                    .next()
+                    .ok_or_else(|| eyre!("Could not parse version from tag_name"))?
+                    .to_string()
+            }
             AssetType::Node => {
                 parts.next();
                 parts.next();
@@ -147,8 +160,8 @@ mod test {
             .await?;
 
         latest_release_mock.assert();
-        assert_eq!(asset_name, "sn_cli-0.72.1-x86_64-unknown-linux-musl.tar.gz");
-        assert_eq!(version, "0.72.1");
+        assert_eq!(asset_name, "safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
+        assert_eq!(version, "0.74.2");
         Ok(())
     }
 
@@ -178,7 +191,7 @@ mod test {
             Err(msg) => {
                 assert_eq!(
                     msg.to_string(),
-                    "Release has no client asset for platform x86_64-unknown-linux-musl"
+                    "Release v0.74.2 has no client asset for platform x86_64-unknown-linux-musl"
                 );
                 Ok(())
             }
@@ -210,9 +223,9 @@ mod test {
         latest_release_mock.assert();
         assert_eq!(
             asset_name,
-            "sn_node-0.77.6-x86_64-unknown-linux-musl.tar.gz"
+            "safenode-0.80.1-x86_64-unknown-linux-musl.tar.gz"
         );
-        assert_eq!(version, "0.77.6");
+        assert_eq!(version, "0.80.1");
         Ok(())
     }
 
@@ -242,7 +255,7 @@ mod test {
             Err(msg) => {
                 assert_eq!(
                     msg.to_string(),
-                    "Release has no node asset for platform x86_64-unknown-linux-musl"
+                    "Release v0.80.1 has no node asset for platform x86_64-unknown-linux-musl"
                 );
                 Ok(())
             }
