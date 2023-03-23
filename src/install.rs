@@ -135,7 +135,7 @@ mod test {
 
         let safe_archive = tmp_data_path.child("safe.tar.gz");
         let downloaded_safe_archive =
-            extract_dir.child("sn_cli-0.72.1-x86_64-unknown-linux-musl.tar.gz");
+            extract_dir.child("safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
         let fake_safe_bin = tmp_data_path.child("safe");
         fake_safe_bin.write_binary(b"fake code")?;
 
@@ -149,7 +149,7 @@ mod test {
         let asset_server = MockServer::start();
         let download_asset_mock = asset_server.mock(|when, then| {
             when.method(GET)
-                .path("/sn_cli-0.72.1-x86_64-unknown-linux-musl.tar.gz");
+                .path("/safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
             then.status(200)
                 .header("Content-Length", safe_archive_metadata.len().to_string())
                 .header("Content-Type", "application/gzip")
@@ -172,7 +172,7 @@ mod test {
         latest_release_mock.assert();
         extracted_safe.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
-        assert_eq!(version, "0.72.1");
+        assert_eq!(version, "0.74.2");
 
         #[cfg(unix)]
         {
@@ -207,7 +207,7 @@ mod test {
 
         let safe_archive = tmp_data_path.child("safe.tar.gz");
         let downloaded_safe_archive =
-            extract_dir.child("sn_cli-0.72.1-x86_64-unknown-linux-musl.tar.gz");
+            extract_dir.child("safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
         let fake_safe_bin = tmp_data_path.child("safe");
         fake_safe_bin.write_binary(b"fake code")?;
 
@@ -221,7 +221,7 @@ mod test {
         let asset_server = MockServer::start();
         let download_asset_mock = asset_server.mock(|when, then| {
             when.method(GET)
-                .path("/sn_cli-0.72.1-x86_64-unknown-linux-musl.tar.gz");
+                .path("/safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
             then.status(200)
                 .header("Content-Length", safe_archive_metadata.len().to_string())
                 .header("Content-Type", "application/gzip")
@@ -244,7 +244,7 @@ mod test {
         latest_release_mock.assert();
         extracted_safe.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
-        assert_eq!(version, "0.72.1");
+        assert_eq!(version, "0.74.2");
         Ok(())
     }
 }
