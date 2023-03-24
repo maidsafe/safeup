@@ -36,12 +36,18 @@ enum Commands {
     ///
     /// The default install path is /usr/local/bin if you run safeup as root, or ~/.safe/cli if you
     /// run as the current user.
+    ///
+    /// If running as the current user, the shell profile will be modified to put safe on PATH.
     Client {
         /// Override the default installation path.
         ///
         /// Any directories that don't exist will be created.
-        #[arg(short, long, value_name = "DIRECTORY")]
+        #[arg(short = 'p', long, value_name = "DIRECTORY")]
         path: Option<PathBuf>,
+
+        /// Disable modification of the shell profile.
+        #[arg(short = 'n', long)]
+        no_modify_shell_profile: bool,
     },
 }
 
@@ -50,15 +56,20 @@ async fn main() -> Result<()> {
     let platform = get_platform()?;
     let cli = Cli::parse();
     let result = match cli.command {
-        Some(Commands::Client { path }) => {
+        Some(Commands::Client {
+            path,
+            no_modify_shell_profile,
+        }) => {
+            let running_elevated = is_running_elevated();
+            let home_dir_path = dirs_next::home_dir()
+                .ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
+
             let dest_dir_path = if let Some(path) = path {
                 path
             } else {
-                if is_running_elevated() {
+                if running_elevated {
                     std::path::PathBuf::from("/usr/local/bin")
                 } else {
-                    let home_dir_path = dirs_next::home_dir()
-                        .ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
                     home_dir_path.join(".safe").join("cli")
                 }
             };
@@ -73,6 +84,14 @@ async fn main() -> Result<()> {
                 dest_dir_path.clone(),
             )
             .await?;
+
+            if !running_elevated && !no_modify_shell_profile {
+                install::configure_shell_profile(
+                    &home_dir_path.join(".bashrc"),
+                    &home_dir_path.join(".safe").join("env"),
+                )
+                .await?
+            }
             Ok(())
         }
         None => {
