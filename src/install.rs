@@ -8,15 +8,28 @@
 
 use crate::github::GithubReleaseRepository;
 use crate::s3::S3AssetRepository;
-use color_eyre::Result;
+use color_eyre::{eyre::eyre, Result};
 use flate2::read::GzDecoder;
+use indoc::indoc;
 use std::env::consts::OS;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
+use std::io::prelude::*;
 use std::io::BufWriter;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use tar::Archive;
+
+const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
+    #!/bin/sh
+    case ":${PATH}:" in
+        *:"$HOME/.safe/cli":*)
+            ;;
+        *)
+            export PATH="$HOME/.safe/cli:$PATH"
+            ;;
+    esac
+"#};
 
 pub enum AssetType {
     Client,
@@ -77,8 +90,47 @@ pub async fn install_bin(
         std::fs::set_permissions(extracted_binary_path, perms)?;
     }
 
-    println!("{bin_name} {version} is now available at {dest_dir_path:#?}/safe");
+    let dest_dir_path = dest_dir_path
+        .to_str()
+        .ok_or_else(|| eyre!("Could not obtain path for shell profile"))?;
+    println!("{bin_name} {version} is now available at {dest_dir_path}/safe");
     Ok(version)
+}
+
+#[cfg(unix)]
+pub async fn configure_shell_profile(
+    shell_profile_file_path: &PathBuf,
+    path_config_file_path: &PathBuf,
+) -> Result<()> {
+    let mut path_config_file = File::create(path_config_file_path)?;
+    path_config_file.write_all(SET_PATH_FILE_CONTENT.as_bytes())?;
+    let path_config_file_path = path_config_file_path
+        .to_str()
+        .ok_or_else(|| eyre!("Could not obtain path for path config file"))?;
+
+    let shell_profile = std::fs::read_to_string(shell_profile_file_path)?;
+    let count = shell_profile
+        .matches(&format!("source {}", path_config_file_path))
+        .count();
+    if count == 0 {
+        let mut shell_profile_file = OpenOptions::new()
+            .append(true)
+            .open(shell_profile_file_path)?;
+        let content = format!("source {}", path_config_file_path);
+        shell_profile_file.write_all(content.as_bytes())?;
+        println!(
+            "Modified shell profile at {}",
+            shell_profile_file_path
+                .to_str()
+                .ok_or_else(|| eyre!("Could not obtain path for shell profile"))?
+        );
+        println!(
+            "To make safe available in this session run 'source {}'",
+            path_config_file_path
+        );
+    }
+
+    Ok(())
 }
 
 fn get_bin_name(asset_type: &AssetType) -> String {
@@ -101,7 +153,7 @@ fn get_bin_name(asset_type: &AssetType) -> String {
 /// The node install will also be tested during the CI process, so we'll get coverage there.
 #[cfg(test)]
 mod test {
-    use super::{install_bin, AssetType};
+    use super::{configure_shell_profile, install_bin, AssetType, SET_PATH_FILE_CONTENT};
     use crate::github::GithubReleaseRepository;
     use crate::s3::S3AssetRepository;
     use assert_fs::prelude::*;
@@ -112,6 +164,7 @@ mod test {
     use std::fs::File;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
 
     #[tokio::test]
     async fn install_bin_should_install_the_latest_version() -> Result<()> {
@@ -245,6 +298,67 @@ mod test {
         extracted_safe.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
         assert_eq!(version, "0.74.2");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn configure_shell_profile_should_put_client_on_path() -> Result<()> {
+        let tmp_data_path = assert_fs::TempDir::new()?;
+        let bashrc_file = tmp_data_path.child(".bashrc");
+        bashrc_file.write_file(Path::new("resources/default_bashrc"))?;
+        let path_config_file = tmp_data_path.child("env");
+
+        let result = configure_shell_profile(
+            &bashrc_file.path().to_path_buf(),
+            &path_config_file.path().to_path_buf(),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        path_config_file.assert(predicates::path::is_file());
+        let path_config_file_contents = std::fs::read_to_string(path_config_file.path())?;
+        assert_eq!(SET_PATH_FILE_CONTENT, path_config_file_contents);
+
+        let bash_profile_contents = std::fs::read_to_string(bashrc_file.path())?;
+        assert!(bash_profile_contents.ends_with(&format!(
+            "source {}",
+            path_config_file.path().to_str().unwrap()
+        )));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn configure_shell_profile_should_not_put_duplicate_entries_in_profile() -> Result<()> {
+        let tmp_data_path = assert_fs::TempDir::new()?;
+        let bashrc_file = tmp_data_path.child(".bashrc");
+        bashrc_file.write_file(Path::new("resources/default_bashrc"))?;
+        let path_config_file = tmp_data_path.child("env");
+
+        let result = configure_shell_profile(
+            &bashrc_file.path().to_path_buf(),
+            &path_config_file.path().to_path_buf(),
+        )
+        .await;
+        assert!(result.is_ok());
+
+        let result = configure_shell_profile(
+            &bashrc_file.path().to_path_buf(),
+            &path_config_file.path().to_path_buf(),
+        )
+        .await;
+        assert!(result.is_ok());
+
+        let bash_profile_contents = std::fs::read_to_string(bashrc_file.path())?;
+        assert_eq!(
+            1,
+            bash_profile_contents
+                .matches(&format!(
+                    "source {}",
+                    path_config_file.path().to_str().unwrap()
+                ))
+                .count()
+        );
+
         Ok(())
     }
 }
