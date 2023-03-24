@@ -22,6 +22,7 @@ const GITHUB_API_URL: &str = "https://api.github.com";
 const ORG_NAME: &str = "maidsafe";
 const REPO_NAME: &str = "safe_network";
 const SAFE_BUCKET_NAME: &str = "https://sn-cli.s3.eu-west-2.amazonaws.com";
+const SAFENODE_BUCKET_NAME: &str = "https://sn-node.s3.eu-west-2.amazonaws.com";
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -53,11 +54,31 @@ enum Commands {
         #[arg(short = 'v', long)]
         version: Option<String>,
     },
+    /// Install the latest version of safenode.
+    ///
+    /// The default install path is /usr/local/bin if you run safeup as root, or ~/.safe/node if you
+    /// run as the current user.
+    ///
+    /// If running as the current user, the shell profile will be modified to put safe on PATH.
+    Node {
+        /// Override the default installation path.
+        ///
+        /// Any directories that don't exist will be created.
+        #[arg(short = 'p', long, value_name = "DIRECTORY")]
+        path: Option<PathBuf>,
+
+        /// Disable modification of the shell profile.
+        #[arg(short = 'n', long)]
+        no_modify_shell_profile: bool,
+
+        /// Install a specific version rather than the latest.
+        #[arg(short = 'v', long)]
+        version: Option<String>,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let platform = get_platform()?;
     let cli = Cli::parse();
     let result = match cli.command {
         Some(Commands::Client {
@@ -65,40 +86,28 @@ async fn main() -> Result<()> {
             no_modify_shell_profile,
             version,
         }) => {
-            let running_elevated = is_running_elevated();
-            let home_dir_path = dirs_next::home_dir()
-                .ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
-
-            let dest_dir_path = if let Some(path) = path {
-                path
-            } else {
-                if running_elevated {
-                    std::path::PathBuf::from("/usr/local/bin")
-                } else {
-                    home_dir_path.join(".safe").join("cli")
-                }
-            };
-            let release_repository =
-                GithubReleaseRepository::new(GITHUB_API_URL, ORG_NAME, REPO_NAME);
-            let asset_repository = S3AssetRepository::new(SAFE_BUCKET_NAME);
-            install::install_bin(
+            install(
                 AssetType::Client,
-                release_repository,
-                asset_repository,
-                &platform,
-                dest_dir_path.clone(),
+                SAFE_BUCKET_NAME,
+                path,
                 version,
+                no_modify_shell_profile,
             )
-            .await?;
-
-            if !running_elevated && !no_modify_shell_profile {
-                install::configure_shell_profile(
-                    &home_dir_path.join(".bashrc"),
-                    &home_dir_path.join(".safe").join("env"),
-                )
-                .await?
-            }
-            Ok(())
+            .await
+        }
+        Some(Commands::Node {
+            path,
+            no_modify_shell_profile,
+            version,
+        }) => {
+            install(
+                AssetType::Node,
+                SAFENODE_BUCKET_NAME,
+                path,
+                version,
+                no_modify_shell_profile,
+            )
+            .await
         }
         None => {
             println!("interactive gui");
@@ -106,6 +115,54 @@ async fn main() -> Result<()> {
         }
     };
     result
+}
+
+async fn install(
+    asset_type: AssetType,
+    bucket_name: &str,
+    path: Option<PathBuf>,
+    version: Option<String>,
+    no_modify_shell_profile: bool,
+) -> Result<()> {
+    let platform = get_platform()?;
+    let running_elevated = is_running_elevated();
+    let home_dir_path =
+        dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
+    let dest_dir_path = if let Some(path) = path {
+        path
+    } else {
+        if running_elevated {
+            std::path::PathBuf::from("/usr/local/bin")
+        } else {
+            let dir = match asset_type {
+                AssetType::Client => "cli",
+                AssetType::Node => "node",
+            };
+            home_dir_path.join(".safe").join(dir)
+        }
+    };
+
+    let release_repository = GithubReleaseRepository::new(GITHUB_API_URL, ORG_NAME, REPO_NAME);
+    let asset_repository = S3AssetRepository::new(&bucket_name);
+    install::install_bin(
+        asset_type,
+        release_repository,
+        asset_repository,
+        &platform,
+        dest_dir_path.clone(),
+        version,
+    )
+    .await?;
+
+    if !running_elevated && !no_modify_shell_profile {
+        install::configure_shell_profile(
+            &home_dir_path.join(".bashrc"),
+            &home_dir_path.join(".safe").join("env"),
+        )
+        .await?
+    }
+
+    Ok(())
 }
 
 fn get_platform() -> Result<String> {

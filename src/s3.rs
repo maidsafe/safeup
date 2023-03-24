@@ -83,7 +83,7 @@ mod test {
         let tmp_data_path = assert_fs::TempDir::new()?;
         let safe_archive = tmp_data_path.child("safe.tar.gz");
         let downloaded_safe_archive =
-            tmp_data_path.child("sn_cli-0.72.1-x86_64-unknown-linux-musl.tar.gz");
+            tmp_data_path.child("safe-0.72.1-x86_64-unknown-linux-musl.tar.gz");
         let fake_safe_bin = tmp_data_path.child("safe");
         fake_safe_bin.write_binary(b"fake code")?;
 
@@ -97,7 +97,7 @@ mod test {
         let server = MockServer::start();
         let download_asset_mock = server.mock(|when, then| {
             when.method(GET)
-                .path("/sn_cli-0.72.1-x86_64-unknown-linux-musl.tar.gz");
+                .path("/safe-0.72.1-x86_64-unknown-linux-musl.tar.gz");
             then.status(200)
                 .header("Content-Length", safe_archive_metadata.len().to_string())
                 .header("Content-Type", "application/gzip")
@@ -107,7 +107,7 @@ mod test {
         let repository = S3AssetRepository::new(&server.base_url());
         repository
             .download_asset(
-                "sn_cli-0.72.1-x86_64-unknown-linux-musl.tar.gz",
+                "safe-0.72.1-x86_64-unknown-linux-musl.tar.gz",
                 &downloaded_safe_archive.path().to_path_buf(),
             )
             .await?;

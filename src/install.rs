@@ -25,8 +25,11 @@ const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
     case ":${PATH}:" in
         *:"$HOME/.safe/cli":*)
             ;;
+        *:"$HOME/.safe/node":*)
+            ;;
         *)
             export PATH="$HOME/.safe/cli:$PATH"
+            export PATH="$HOME/.safe/node:$PATH"
             ;;
     esac
 "#};
@@ -374,7 +377,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn configure_shell_profile_should_put_client_on_path() -> Result<()> {
+    async fn configure_shell_profile_should_put_client_and_node_on_path() -> Result<()> {
         let tmp_data_path = assert_fs::TempDir::new()?;
         let bashrc_file = tmp_data_path.child(".bashrc");
         bashrc_file.write_file(Path::new("resources/default_bashrc"))?;
