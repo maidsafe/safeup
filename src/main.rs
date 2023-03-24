@@ -80,7 +80,7 @@ enum Commands {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let result = match cli.command {
+    match cli.command {
         Some(Commands::Client {
             path,
             no_modify_shell_profile,
@@ -113,8 +113,7 @@ async fn main() -> Result<()> {
             println!("interactive gui");
             Ok(())
         }
-    };
-    result
+    }
 }
 
 async fn install(
@@ -130,20 +129,18 @@ async fn install(
         dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
     let dest_dir_path = if let Some(path) = path {
         path
+    } else if running_elevated {
+        std::path::PathBuf::from("/usr/local/bin")
     } else {
-        if running_elevated {
-            std::path::PathBuf::from("/usr/local/bin")
-        } else {
-            let dir = match asset_type {
-                AssetType::Client => "cli",
-                AssetType::Node => "node",
-            };
-            home_dir_path.join(".safe").join(dir)
-        }
+        let dir = match asset_type {
+            AssetType::Client => "cli",
+            AssetType::Node => "node",
+        };
+        home_dir_path.join(".safe").join(dir)
     };
 
     let release_repository = GithubReleaseRepository::new(GITHUB_API_URL, ORG_NAME, REPO_NAME);
-    let asset_repository = S3AssetRepository::new(&bucket_name);
+    let asset_repository = S3AssetRepository::new(bucket_name);
     install::install_bin(
         asset_type,
         release_repository,
@@ -168,15 +165,13 @@ async fn install(
 fn get_platform() -> Result<String> {
     match OS {
         "linux" => match ARCH {
-            "x86_64" => return Ok(format!("{}-unknown-{}-musl", ARCH, OS)),
-            "armv7" => return Ok(format!("{}-unknown-{}-musleabihf", ARCH, OS)),
-            "arm" => return Ok(format!("{}-unknown-{}-musleabi", ARCH, OS)),
-            "aarch64" => return Ok(format!("{}-unknown-{}-musl", ARCH, OS)),
-            &_ => {
-                return Err(eyre!(
-                    "We currently do not have binaries for the {OS}/{ARCH} combination"
-                ))
-            }
+            "x86_64" => Ok(format!("{}-unknown-{}-musl", ARCH, OS)),
+            "armv7" => Ok(format!("{}-unknown-{}-musleabihf", ARCH, OS)),
+            "arm" => Ok(format!("{}-unknown-{}-musleabi", ARCH, OS)),
+            "aarch64" => Ok(format!("{}-unknown-{}-musl", ARCH, OS)),
+            &_ => Err(eyre!(
+                "We currently do not have binaries for the {OS}/{ARCH} combination"
+            )),
         },
         "windows" => {
             if ARCH != "x86_64" {
@@ -184,7 +179,7 @@ fn get_platform() -> Result<String> {
                     "We currently only have x86_64 binaries available for Windows"
                 ));
             }
-            return Ok(format!("{}-pc-{}-msvc", ARCH, OS));
+            Ok(format!("{}-pc-{}-msvc", ARCH, OS))
         }
         "macos" => {
             if ARCH != "x86_64" {
@@ -192,11 +187,9 @@ fn get_platform() -> Result<String> {
                     "We currently only have x86_64 binaries available for macOS"
                 ));
             }
-            return Ok(format!("{}-apple-darwin", ARCH));
+            Ok(format!("{}-apple-darwin", ARCH))
         }
-        &_ => {
-            return Err(eyre!("{OS} is not currently supported by safeup"));
-        }
+        &_ => Err(eyre!("{OS} is not currently supported by safeup")),
     }
 }
 

@@ -10,9 +10,11 @@ use crate::github::GithubReleaseRepository;
 use crate::s3::S3AssetRepository;
 use color_eyre::{eyre::eyre, Result};
 use flate2::read::GzDecoder;
+#[cfg(unix)]
 use indoc::indoc;
 use std::env::consts::OS;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
+#[cfg(unix)]
 use std::io::prelude::*;
 use std::io::BufWriter;
 #[cfg(unix)]
@@ -20,6 +22,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use tar::Archive;
 
+#[cfg(unix)]
 const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
     #!/bin/sh
     case ":${PATH}:" in
@@ -91,8 +94,8 @@ pub async fn install_bin(
     let archive_file = File::open(archive_path.clone())?;
     let decoder = GzDecoder::new(archive_file);
     let mut archive = Archive::new(decoder);
-    let mut entries = archive.entries()?;
-    while let Some(entry_result) = entries.next() {
+    let entries = archive.entries()?;
+    for entry_result in entries {
         let mut entry = entry_result?;
         let mut file = BufWriter::new(File::create(dest_dir_path.join(entry.path()?))?);
         std::io::copy(&mut entry, &mut file)?;
@@ -130,7 +133,7 @@ pub async fn configure_shell_profile(
         .matches(&format!("source {}", path_config_file_path))
         .count();
     if count == 0 {
-        let mut shell_profile_file = OpenOptions::new()
+        let mut shell_profile_file = std::fs::OpenOptions::new()
             .append(true)
             .open(shell_profile_file_path)?;
         let content = format!("source {}", path_config_file_path);
@@ -147,6 +150,14 @@ pub async fn configure_shell_profile(
         );
     }
 
+    Ok(())
+}
+
+#[cfg(windows)]
+pub async fn configure_shell_profile(
+    _shell_profile_file_path: &PathBuf,
+    _path_config_file_path: &PathBuf,
+) -> Result<()> {
     Ok(())
 }
 
@@ -170,7 +181,10 @@ fn get_bin_name(asset_type: &AssetType) -> String {
 /// The node install will also be tested during the CI process, so we'll get coverage there.
 #[cfg(test)]
 mod test {
+    #[cfg(unix)]
     use super::{configure_shell_profile, install_bin, AssetType, SET_PATH_FILE_CONTENT};
+    #[cfg(windows)]
+    use super::{install_bin, AssetType};
     use crate::github::GithubReleaseRepository;
     use crate::s3::S3AssetRepository;
     use assert_fs::prelude::*;
@@ -187,7 +201,7 @@ mod test {
     async fn install_bin_should_install_the_latest_version() -> Result<()> {
         let github_server = MockServer::start();
         let response_body = std::fs::read_to_string(
-            std::path::Path::new("resources").join("latest_release_response_body.json"),
+            Path::new("resources").join("latest_release_response_body.json"),
         )?;
 
         let latest_release_mock = github_server.mock(|when, then| {
@@ -261,7 +275,7 @@ mod test {
     ) -> Result<()> {
         let github_server = MockServer::start();
         let response_body = std::fs::read_to_string(
-            std::path::Path::new("resources").join("latest_release_response_body.json"),
+            Path::new("resources").join("latest_release_response_body.json"),
         )?;
 
         let latest_release_mock = github_server.mock(|when, then| {
@@ -376,6 +390,7 @@ mod test {
         Ok(())
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn configure_shell_profile_should_put_client_and_node_on_path() -> Result<()> {
         let tmp_data_path = assert_fs::TempDir::new()?;
@@ -402,6 +417,7 @@ mod test {
         Ok(())
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn configure_shell_profile_should_not_put_duplicate_entries_in_profile() -> Result<()> {
         let tmp_data_path = assert_fs::TempDir::new()?;

@@ -68,7 +68,7 @@ jobs:
 
     - uses: EmbarkStudios/cargo-deny-action@v1
 
-  test:
+  unit-test:
     if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
     name: Test
     runs-on: ${{ matrix.os }}
@@ -96,6 +96,122 @@ jobs:
         with:
           command: test
           args: --release
+
+  test-non-elevated-install-linux:
+    if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
+    name: Install test non-elevated (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Install binaries
+        shell: bash
+        run: |
+          cargo run -- client --version 0.74.2
+          cargo run -- node --version 0.80.3
+      - name: Check if safe is available in new shell session
+        shell: bash
+        run: |
+          # The installer adds this to the .bashrc file, but even though
+          # there's a new shell session for each step, the new bashrc isn't
+          # being sourced. Perhaps it's not a login shell or something. So
+          # unfortunately we need to explicitly source the env file. However,
+          # the test does prove that the env file modifies PATH correctly and
+          # that the installs of the binaries are available from their local
+          # locations.
+          source ~/.safe/env
+
+          version=$(safe --version | awk '{ print $2 }')
+          if [[ "$version" != "0.74.2" ]]; then
+            echo "The correct version of safe has not been installed"
+            exit 1
+          fi
+
+          version=$(safenode --version | awk '{ print $2 }')
+          if [[ "$version" != "0.80.3" ]]; then
+            echo "The correct version of safenode has not been installed"
+            exit 1
+          fi
+
+  test-elevated-install-linux:
+    if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
+    name: Install test elevated (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Install binaries
+        shell: bash
+        run: |
+          cargo build --release
+          sudo ./target/release/safeup client --version 0.74.2
+          sudo ./target/release/safeup node --version 0.80.3
+
+          [[ -f "/usr/local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
+          [[ -f "/usr/local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
+
+          # Due to installation at /usr/local/bin, the binaries should be
+          # immediately available in the same shell session.
+          version=$(safe --version | awk '{ print $2 }')
+          if [[ "$version" == "0.74.2" ]]; then
+            echo "The correct version of safe has been installed"
+          else
+            echo "The correct version of safe has not been installed"
+            exit 1
+          fi
+
+          version=$(safenode --version | awk '{ print $2 }')
+          if [[ "$version" == "0.80.3" ]]; then
+            echo "The correct version of safenode has been installed"
+          else
+            echo "The correct version of safenode has not been installed"
+            exit 1
+          fi
+
+  # On macOS you can only run elevated, so there is no non-elevated test.
+  test-elevated-install-macos:
+    if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
+    name: Install test elevated (macOS)
+    runs-on: macOS-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Install binaries
+        shell: zsh {0}
+        run: |
+          cargo run -- client --version 0.74.2
+          cargo run -- node --version 0.80.3
+
+          [[ -f "/usr/local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
+          [[ -f "/usr/local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
+
+          version=$(safe --version | awk '{ print $2 }')
+          if [[ "$version" == "0.74.2" ]]; then
+            echo "The correct version of safe has been installed"
+          else
+            echo "The correct version of safe has not been installed"
+            exit 1
+          fi
+
+          version=$(safenode --version | awk '{ print $2 }')
+          if [[ "$version" == "0.80.3" ]]; then
+            echo "The correct version of safenode has been installed"
+          else
+            echo "The correct version of safenode has not been installed"
+            exit 1
+          fi
 
   test-publish:
     if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
