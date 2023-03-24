@@ -64,12 +64,7 @@ impl GithubReleaseRepository {
             .ok_or_else(|| eyre!("Response body does not contain 'tag_name' value"))?;
         let version = self.get_version_from_tag_name(&asset_type, tag_name)?;
 
-        let asset_name = match asset_type {
-            AssetType::Client => format!("safe-{version}-{platform}.tar.gz"),
-            AssetType::Node => {
-                format!("safenode-{version}-{platform}.tar.gz")
-            }
-        };
+        let asset_name = self.get_versioned_asset_name(&asset_type, platform, &version);
         if self.release_has_asset(&json, &asset_name)? {
             return Ok((asset_name, version));
         }
@@ -84,6 +79,18 @@ impl GithubReleaseRepository {
         };
 
         Err(eyre!(msg))
+    }
+
+    pub fn get_versioned_asset_name(
+        &self,
+        asset_type: &AssetType,
+        platform: &str,
+        version: &str,
+    ) -> String {
+        match asset_type {
+            AssetType::Client => format!("safe-{version}-{platform}.tar.gz"),
+            AssetType::Node => format!("safenode-{version}-{platform}.tar.gz"),
+        }
     }
 
     fn release_has_asset(&self, json: &Value, asset_name: &str) -> Result<bool> {
@@ -292,5 +299,29 @@ mod test {
             }
             Ok(_) => Err(eyre!("This test case is expected to return an error")),
         }
+    }
+
+    #[test]
+    fn get_versioned_asset_name_should_return_client_asset_name() -> Result<()> {
+        let repository = GithubReleaseRepository::new("localhost", "maidsafe", "safe_network");
+        let result = repository.get_versioned_asset_name(
+            &AssetType::Client,
+            "x86_64-unknown-linux-musl",
+            "0.74.2",
+        );
+        assert_eq!(result, "safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
+        Ok(())
+    }
+
+    #[test]
+    fn get_versioned_asset_name_should_return_node_asset_name() -> Result<()> {
+        let repository = GithubReleaseRepository::new("localhost", "maidsafe", "safe_network");
+        let result = repository.get_versioned_asset_name(
+            &AssetType::Node,
+            "x86_64-unknown-linux-musl",
+            "0.80.4",
+        );
+        assert_eq!(result, "safenode-0.80.4-x86_64-unknown-linux-musl.tar.gz");
+        Ok(())
     }
 }

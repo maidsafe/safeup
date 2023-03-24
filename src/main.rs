@@ -48,6 +48,10 @@ enum Commands {
         /// Disable modification of the shell profile.
         #[arg(short = 'n', long)]
         no_modify_shell_profile: bool,
+
+        /// Install a specific version rather than the latest.
+        #[arg(short = 'v', long)]
+        version: Option<String>,
     },
 }
 
@@ -59,6 +63,7 @@ async fn main() -> Result<()> {
         Some(Commands::Client {
             path,
             no_modify_shell_profile,
+            version,
         }) => {
             let running_elevated = is_running_elevated();
             let home_dir_path = dirs_next::home_dir()
@@ -82,6 +87,7 @@ async fn main() -> Result<()> {
                 asset_repository,
                 &platform,
                 dest_dir_path.clone(),
+                version,
             )
             .await?;
 

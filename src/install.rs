@@ -48,6 +48,7 @@ pub enum AssetType {
 /// * `asset_repository` - The repository for retrieving the binary archive on S3.
 /// * `platform` - The target triple platform of the binary to be installed.
 /// * `dest_dir_path` - Path of the directory where the binary will be installed.
+/// * `version` - Optionally install a specific version, rather than the latest.
 ///
 /// # Returns
 ///
@@ -58,14 +59,27 @@ pub async fn install_bin(
     asset_repository: S3AssetRepository,
     platform: &str,
     dest_dir_path: PathBuf,
+    version: Option<String>,
 ) -> Result<String> {
     let bin_name = get_bin_name(&asset_type);
-    println!("Installing {bin_name} for {platform} at {dest_dir_path:#?}...");
+    println!(
+        "Installing {bin_name} for {platform} at {}...",
+        dest_dir_path
+            .to_str()
+            .ok_or_else(|| eyre!("Could not obtain path for shell profile"))?
+    );
     std::fs::create_dir_all(&dest_dir_path)?;
 
-    let (asset_name, version) = release_repository
-        .get_latest_asset_name(asset_type, platform)
-        .await?;
+    let (asset_name, version) = if let Some(version) = version {
+        let asset_name =
+            release_repository.get_versioned_asset_name(&asset_type, platform, &version);
+        (asset_name, version)
+    } else {
+        release_repository
+            .get_latest_asset_name(asset_type, platform)
+            .await?
+    };
+
     let archive_path = dest_dir_path.join(&asset_name);
     asset_repository
         .download_asset(&asset_name, &archive_path)
@@ -218,6 +232,7 @@ mod test {
             asset_repository,
             "x86_64-unknown-linux-musl",
             extract_dir.path().to_path_buf(),
+            None,
         )
         .await?;
 
@@ -290,6 +305,7 @@ mod test {
             asset_repository,
             "x86_64-unknown-linux-musl",
             extract_dir.path().to_path_buf(),
+            None,
         )
         .await?;
 
@@ -298,6 +314,62 @@ mod test {
         extracted_safe.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
         assert_eq!(version, "0.74.2");
+        Ok(())
+    }
+
+    /// For installing a specific version, no request is made to the Github API, so the mocked
+    /// Github server is not necessary.
+    #[tokio::test]
+    async fn install_bin_should_install_a_specific_version() -> Result<()> {
+        let specific_version = "0.74.5";
+        let tmp_data_path = assert_fs::TempDir::new()?;
+        let extract_dir = tmp_data_path.child("extract");
+        extract_dir.create_dir_all()?;
+        let extracted_safe = extract_dir.child("safe");
+
+        let safe_archive = tmp_data_path.child("safe.tar.gz");
+        let downloaded_safe_archive = extract_dir.child(format!(
+            "safe-{specific_version}-x86_64-unknown-linux-musl.tar.gz"
+        ));
+        let fake_safe_bin = tmp_data_path.child("safe");
+        fake_safe_bin.write_binary(b"fake code")?;
+
+        let mut fake_safe_bin_file = File::open(fake_safe_bin.path())?;
+        let gz_encoder = GzEncoder::new(File::create(safe_archive.path())?, Compression::default());
+        let mut builder = tar::Builder::new(gz_encoder);
+        builder.append_file("safe", &mut fake_safe_bin_file)?;
+        builder.into_inner()?;
+        let safe_archive_metadata = std::fs::metadata(safe_archive.path())?;
+
+        let asset_server = MockServer::start();
+        let download_asset_mock = asset_server.mock(|when, then| {
+            when.method(GET).path(format!(
+                "/safe-{specific_version}-x86_64-unknown-linux-musl.tar.gz"
+            ));
+            then.status(200)
+                .header("Content-Length", safe_archive_metadata.len().to_string())
+                .header("Content-Type", "application/gzip")
+                .body_from_file(safe_archive.path().to_str().unwrap());
+        });
+
+        let asset_repository = S3AssetRepository::new(&asset_server.base_url());
+        let release_repository =
+            GithubReleaseRepository::new("localhost", "maidsafe", "safe_network");
+        let version = install_bin(
+            AssetType::Client,
+            release_repository,
+            asset_repository,
+            "x86_64-unknown-linux-musl",
+            extract_dir.path().to_path_buf(),
+            Some(specific_version.to_string()),
+        )
+        .await?;
+
+        download_asset_mock.assert();
+        extracted_safe.assert(predicates::path::is_file());
+        downloaded_safe_archive.assert(predicates::path::missing());
+        assert_eq!(version, specific_version);
+
         Ok(())
     }
 
