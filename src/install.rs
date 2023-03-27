@@ -18,6 +18,8 @@ use std::fs::{File, OpenOptions};
 #[cfg(unix)]
 use std::io::prelude::*;
 use std::io::BufWriter;
+#[cfg(windows)]
+use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -42,6 +44,7 @@ const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
 pub enum AssetType {
     Client,
     Node,
+    Testnet,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,7 +58,7 @@ impl Settings {
     pub fn read(settings_file_path: &PathBuf) -> Result<Settings> {
         let settings = if let Ok(mut file) = File::open(settings_file_path) {
             let mut contents = String::new();
-            file.read_to_string(&mut contents).unwrap();
+            file.read_to_string(&mut contents)?;
             serde_json::from_str(&contents).unwrap_or_else(|_| Settings {
                 safe_path: PathBuf::new(),
                 safenode_path: PathBuf::new(),
@@ -72,6 +75,10 @@ impl Settings {
     }
 
     pub fn save(&self, settings_file_path: &PathBuf) -> Result<()> {
+        let parent_dir = settings_file_path
+            .parent()
+            .ok_or_else(|| eyre!("Could not obtain parent"))?;
+        std::fs::create_dir_all(parent_dir)?;
         let mut file = OpenOptions::new()
             .write(true)
             .truncate(true)
@@ -207,6 +214,7 @@ fn get_bin_name(asset_type: &AssetType) -> String {
     let mut bin_name = match asset_type {
         AssetType::Client => "safe".to_string(),
         AssetType::Node => "safenode".to_string(),
+        AssetType::Testnet => "testnet".to_string(),
     };
     if OS == "windows" {
         bin_name.push_str(".exe");
@@ -226,7 +234,7 @@ mod test {
     #[cfg(unix)]
     use super::{configure_shell_profile, install_bin, AssetType, Settings, SET_PATH_FILE_CONTENT};
     #[cfg(windows)]
-    use super::{install_bin, AssetType};
+    use super::{install_bin, AssetType, Settings};
     use crate::github::GithubReleaseRepository;
     use crate::s3::S3AssetRepository;
     use assert_fs::prelude::*;
@@ -238,6 +246,21 @@ mod test {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
+
+    /// These may seem pointless, but they are useful for when the tests run on different
+    /// platforms.
+    #[cfg(unix)]
+    const SAFE_BIN_NAME: &str = "safe";
+    #[cfg(windows)]
+    const SAFE_BIN_NAME: &str = "safe.exe";
+    #[cfg(unix)]
+    const SAFENODE_BIN_NAME: &str = "safenode";
+    #[cfg(windows)]
+    const SAFENODE_BIN_NAME: &str = "safenode.exe";
+    #[cfg(unix)]
+    const PLATFORM: &str = "x86_64-unknown-linux-musl";
+    #[cfg(windows)]
+    const PLATFORM: &str = "x86_64-pc-windows-msvc";
 
     #[tokio::test]
     async fn install_bin_should_install_the_latest_version() -> Result<()> {
@@ -257,25 +280,24 @@ mod test {
         let tmp_data_path = assert_fs::TempDir::new()?;
         let extract_dir = tmp_data_path.child("extract");
         extract_dir.create_dir_all()?;
-        let extracted_safe = extract_dir.child("safe");
+        let extracted_safe_bin = extract_dir.child(SAFE_BIN_NAME);
 
         let safe_archive = tmp_data_path.child("safe.tar.gz");
-        let downloaded_safe_archive =
-            extract_dir.child("safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
-        let fake_safe_bin = tmp_data_path.child("safe");
+        let downloaded_safe_archive = extract_dir.child(format!("safe-0.74.2-{}.tar.gz", PLATFORM));
+        let fake_safe_bin = tmp_data_path.child(SAFE_BIN_NAME);
         fake_safe_bin.write_binary(b"fake code")?;
 
         let mut fake_safe_bin_file = File::open(fake_safe_bin.path())?;
         let gz_encoder = GzEncoder::new(File::create(safe_archive.path())?, Compression::default());
         let mut builder = tar::Builder::new(gz_encoder);
-        builder.append_file("safe", &mut fake_safe_bin_file)?;
+        builder.append_file(SAFE_BIN_NAME, &mut fake_safe_bin_file)?;
         builder.into_inner()?;
         let safe_archive_metadata = std::fs::metadata(safe_archive.path())?;
 
         let asset_server = MockServer::start();
         let download_asset_mock = asset_server.mock(|when, then| {
             when.method(GET)
-                .path("/safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
+                .path(format!("/safe-0.74.2-{}.tar.gz", PLATFORM));
             then.status(200)
                 .header("Content-Length", safe_archive_metadata.len().to_string())
                 .header("Content-Type", "application/gzip")
@@ -289,7 +311,7 @@ mod test {
             AssetType::Client,
             release_repository,
             asset_repository,
-            "x86_64-unknown-linux-musl",
+            PLATFORM,
             extract_dir.path().to_path_buf(),
             None,
         )
@@ -297,14 +319,14 @@ mod test {
 
         download_asset_mock.assert();
         latest_release_mock.assert();
-        extracted_safe.assert(predicates::path::is_file());
+        extracted_safe_bin.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
         assert_eq!(version, "0.74.2");
-        assert_eq!(bin_path, extracted_safe.to_path_buf());
+        assert_eq!(bin_path, extracted_safe_bin.to_path_buf());
 
         #[cfg(unix)]
         {
-            let extracted_safe_metadata = std::fs::metadata(extracted_safe.path())?;
+            let extracted_safe_metadata = std::fs::metadata(extracted_safe_bin.path())?;
             assert_eq!(
                 (extracted_safe_metadata.permissions().mode() & 0o777),
                 0o755
@@ -329,26 +351,32 @@ mod test {
         });
 
         let tmp_data_path = assert_fs::TempDir::new()?;
-        let extract_dir = tmp_data_path.child("extract/when/parents/do/not/exist");
-        let extracted_safe = extract_dir.child("safe");
+        let extract_dir = tmp_data_path.child(
+            PathBuf::from("extract")
+                .join("when")
+                .join("parents")
+                .join("do")
+                .join("not")
+                .join("exist"),
+        );
+        let extracted_safe_bin = extract_dir.child(SAFE_BIN_NAME);
 
         let safe_archive = tmp_data_path.child("safe.tar.gz");
-        let downloaded_safe_archive =
-            extract_dir.child("safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
-        let fake_safe_bin = tmp_data_path.child("safe");
+        let downloaded_safe_archive = extract_dir.child(format!("safe-0.74.2-{}.tar.gz", PLATFORM));
+        let fake_safe_bin = tmp_data_path.child(SAFE_BIN_NAME);
         fake_safe_bin.write_binary(b"fake code")?;
 
         let mut fake_safe_bin_file = File::open(fake_safe_bin.path())?;
         let gz_encoder = GzEncoder::new(File::create(safe_archive.path())?, Compression::default());
         let mut builder = tar::Builder::new(gz_encoder);
-        builder.append_file("safe", &mut fake_safe_bin_file)?;
+        builder.append_file(SAFE_BIN_NAME, &mut fake_safe_bin_file)?;
         builder.into_inner()?;
         let safe_archive_metadata = std::fs::metadata(safe_archive.path())?;
 
         let asset_server = MockServer::start();
         let download_asset_mock = asset_server.mock(|when, then| {
             when.method(GET)
-                .path("/safe-0.74.2-x86_64-unknown-linux-musl.tar.gz");
+                .path(format!("/safe-0.74.2-{}.tar.gz", PLATFORM));
             then.status(200)
                 .header("Content-Length", safe_archive_metadata.len().to_string())
                 .header("Content-Type", "application/gzip")
@@ -362,7 +390,7 @@ mod test {
             AssetType::Client,
             release_repository,
             asset_repository,
-            "x86_64-unknown-linux-musl",
+            PLATFORM,
             extract_dir.path().to_path_buf(),
             None,
         )
@@ -370,10 +398,10 @@ mod test {
 
         download_asset_mock.assert();
         latest_release_mock.assert();
-        extracted_safe.assert(predicates::path::is_file());
+        extracted_safe_bin.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
         assert_eq!(version, "0.74.2");
-        assert_eq!(bin_path, extracted_safe.to_path_buf());
+        assert_eq!(bin_path, extracted_safe_bin.to_path_buf());
         Ok(())
     }
 
@@ -385,27 +413,25 @@ mod test {
         let tmp_data_path = assert_fs::TempDir::new()?;
         let extract_dir = tmp_data_path.child("extract");
         extract_dir.create_dir_all()?;
-        let extracted_safe = extract_dir.child("safe");
+        let extracted_safe_bin = extract_dir.child(SAFE_BIN_NAME);
 
         let safe_archive = tmp_data_path.child("safe.tar.gz");
-        let downloaded_safe_archive = extract_dir.child(format!(
-            "safe-{specific_version}-x86_64-unknown-linux-musl.tar.gz"
-        ));
-        let fake_safe_bin = tmp_data_path.child("safe");
+        let downloaded_safe_archive =
+            extract_dir.child(format!("safe-{specific_version}-{}.tar.gz", PLATFORM));
+        let fake_safe_bin = tmp_data_path.child(SAFE_BIN_NAME);
         fake_safe_bin.write_binary(b"fake code")?;
 
         let mut fake_safe_bin_file = File::open(fake_safe_bin.path())?;
         let gz_encoder = GzEncoder::new(File::create(safe_archive.path())?, Compression::default());
         let mut builder = tar::Builder::new(gz_encoder);
-        builder.append_file("safe", &mut fake_safe_bin_file)?;
+        builder.append_file(SAFE_BIN_NAME, &mut fake_safe_bin_file)?;
         builder.into_inner()?;
         let safe_archive_metadata = std::fs::metadata(safe_archive.path())?;
 
         let asset_server = MockServer::start();
         let download_asset_mock = asset_server.mock(|when, then| {
-            when.method(GET).path(format!(
-                "/safe-{specific_version}-x86_64-unknown-linux-musl.tar.gz"
-            ));
+            when.method(GET)
+                .path(format!("/safe-{specific_version}-{}.tar.gz", PLATFORM));
             then.status(200)
                 .header("Content-Length", safe_archive_metadata.len().to_string())
                 .header("Content-Type", "application/gzip")
@@ -419,17 +445,17 @@ mod test {
             AssetType::Client,
             release_repository,
             asset_repository,
-            "x86_64-unknown-linux-musl",
+            PLATFORM,
             extract_dir.path().to_path_buf(),
             Some(specific_version.to_string()),
         )
         .await?;
 
         download_asset_mock.assert();
-        extracted_safe.assert(predicates::path::is_file());
+        extracted_safe_bin.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
         assert_eq!(version, specific_version);
-        assert_eq!(bin_path, extracted_safe.to_path_buf());
+        assert_eq!(bin_path, extracted_safe_bin.to_path_buf());
 
         Ok(())
     }
@@ -501,7 +527,39 @@ mod test {
     async fn save_should_write_new_settings_when_settings_file_does_not_exist() -> Result<()> {
         let tmp_data_path = assert_fs::TempDir::new()?;
         let settings_file = tmp_data_path.child("safeup.json");
-        let safe_bin_file = tmp_data_path.child("safe");
+        let safe_bin_file = tmp_data_path.child(SAFE_BIN_NAME);
+        safe_bin_file.write_binary(b"fake safe code")?;
+        let safenode_bin_file = tmp_data_path.child("safenode");
+        safenode_bin_file.write_binary(b"fake safenode code")?;
+        let testnet_bin_file = tmp_data_path.child("testnet");
+        testnet_bin_file.write_binary(b"fake testnet code")?;
+
+        let settings = Settings {
+            safe_path: safe_bin_file.to_path_buf(),
+            safenode_path: safenode_bin_file.to_path_buf(),
+            testnet_path: testnet_bin_file.to_path_buf(),
+        };
+
+        settings.save(&settings_file.to_path_buf())?;
+
+        settings_file.assert(predicates::path::is_file());
+        let settings = Settings::read(&settings_file.to_path_buf())?;
+        assert_eq!(settings.safe_path, safe_bin_file.to_path_buf());
+        assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
+        assert_eq!(settings.testnet_path, testnet_bin_file.to_path_buf());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn save_should_write_new_settings_when_parent_dirs_do_not_exist() -> Result<()> {
+        let tmp_data_path = assert_fs::TempDir::new()?;
+        let settings_file = tmp_data_path.child(
+            PathBuf::from("some")
+                .join("parent")
+                .join("dirs")
+                .join("safeup.json"),
+        );
+        let safe_bin_file = tmp_data_path.child(SAFE_BIN_NAME);
         safe_bin_file.write_binary(b"fake safe code")?;
         let safenode_bin_file = tmp_data_path.child("safenode");
         safenode_bin_file.write_binary(b"fake safenode code")?;
@@ -538,7 +596,7 @@ mod test {
         "#,
         )?;
 
-        let safenode_bin_file = tmp_data_path.child("safenode");
+        let safenode_bin_file = tmp_data_path.child(SAFENODE_BIN_NAME);
         safenode_bin_file.write_binary(b"fake safenode code")?;
 
         let mut settings = Settings::read(&settings_file.to_path_buf())?;
