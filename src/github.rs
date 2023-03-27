@@ -76,6 +76,9 @@ impl GithubReleaseRepository {
             AssetType::Node => {
                 format!("Release v{version} has no node asset for platform {platform}")
             }
+            AssetType::Testnet => {
+                format!("Release v{version} has no testnet asset for platform {platform}")
+            }
         };
 
         Err(eyre!(msg))
@@ -90,6 +93,7 @@ impl GithubReleaseRepository {
         match asset_type {
             AssetType::Client => format!("safe-{version}-{platform}.tar.gz"),
             AssetType::Node => format!("safenode-{version}-{platform}.tar.gz"),
+            AssetType::Testnet => format!("testnet-{version}-{platform}.tar.gz"),
         }
     }
 
@@ -134,6 +138,10 @@ impl GithubReleaseRepository {
                     .ok_or_else(|| eyre!("Could not parse version from tag_name"))?
                     .to_string()
             }
+            AssetType::Testnet => parts
+                .last()
+                .ok_or_else(|| eyre!("Could not parse version from tag_name"))?
+                .to_string(),
         };
         Ok(version)
     }
@@ -301,6 +309,104 @@ mod test {
         }
     }
 
+    #[tokio::test]
+    async fn get_latest_asset_name_for_testnet_should_get_asset_name_with_the_latest_version(
+    ) -> Result<()> {
+        let server = MockServer::start();
+        let response_body = std::fs::read_to_string(
+            std::path::Path::new("resources").join("latest_release_response_body.json"),
+        )?;
+        let latest_release_mock = server.mock(|when, then| {
+            when.method(GET)
+                .path("/repos/maidsafe/safe_network/releases/latest");
+            then.status(200)
+                .header("server", "Github.com")
+                .body(response_body);
+        });
+
+        let repository =
+            GithubReleaseRepository::new(&server.base_url(), "maidsafe", "safe_network");
+        let (asset_name, version) = repository
+            .get_latest_asset_name(AssetType::Testnet, "x86_64-unknown-linux-musl")
+            .await?;
+
+        latest_release_mock.assert();
+        assert_eq!(asset_name, "testnet-0.1.3-x86_64-unknown-linux-musl.tar.gz");
+        assert_eq!(version, "0.1.3");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_latest_asset_name_for_testnet_should_return_error_when_release_has_no_asset(
+    ) -> Result<()> {
+        let server = MockServer::start();
+        let response_body = std::fs::read_to_string(
+            std::path::Path::new("resources").join("release_with_no_assets_response_body.json"),
+        )?;
+        let latest_release_mock = server.mock(|when, then| {
+            when.method(GET)
+                .path("/repos/maidsafe/safe_network/releases/latest");
+            then.status(200)
+                .header("server", "Github.com")
+                .body(response_body);
+        });
+
+        let repository =
+            GithubReleaseRepository::new(&server.base_url(), "maidsafe", "safe_network");
+        let result = repository
+            .get_latest_asset_name(AssetType::Testnet, "x86_64-unknown-linux-musl")
+            .await;
+
+        latest_release_mock.assert();
+        match result {
+            Err(msg) => {
+                assert_eq!(
+                    msg.to_string(),
+                    "Release v0.1.3 has no testnet asset for platform x86_64-unknown-linux-musl"
+                );
+                Ok(())
+            }
+            Ok(_) => Err(eyre!("This test case is expected to return an error")),
+        }
+    }
+
+    /// This test case is slightly different from the node and client because when you call `split`
+    /// to get the version numbers, in the case of testnet, we are using `last`, which will have a
+    /// value.
+    #[tokio::test]
+    async fn get_latest_asset_name_for_testnet_should_return_error_when_release_has_invalid_tag_name(
+    ) -> Result<()> {
+        let server = MockServer::start();
+        let response_body = std::fs::read_to_string(
+            std::path::Path::new("resources").join("release_with_invalid_tag_name.json"),
+        )?;
+        let latest_release_mock = server.mock(|when, then| {
+            when.method(GET)
+                .path("/repos/maidsafe/safe_network/releases/latest");
+            then.status(200)
+                .header("server", "Github.com")
+                .body(response_body);
+        });
+
+        let repository =
+            GithubReleaseRepository::new(&server.base_url(), "maidsafe", "safe_network");
+        let result = repository
+            .get_latest_asset_name(AssetType::Testnet, "x86_64-unknown-linux-musl")
+            .await;
+
+        latest_release_mock.assert();
+        match result {
+            Err(msg) => {
+                assert_eq!(
+                    msg.to_string(),
+                    "Release v0.1.0 has no testnet asset for platform x86_64-unknown-linux-musl"
+                );
+                Ok(())
+            }
+            Ok(_) => Err(eyre!("This test case is expected to return an error")),
+        }
+    }
+
     #[test]
     fn get_versioned_asset_name_should_return_client_asset_name() -> Result<()> {
         let repository = GithubReleaseRepository::new("localhost", "maidsafe", "safe_network");
@@ -322,6 +428,18 @@ mod test {
             "0.80.4",
         );
         assert_eq!(result, "safenode-0.80.4-x86_64-unknown-linux-musl.tar.gz");
+        Ok(())
+    }
+
+    #[test]
+    fn get_versioned_asset_name_should_return_testnet_asset_name() -> Result<()> {
+        let repository = GithubReleaseRepository::new("localhost", "maidsafe", "safe_network");
+        let result = repository.get_versioned_asset_name(
+            &AssetType::Testnet,
+            "x86_64-unknown-linux-musl",
+            "0.1.3",
+        );
+        assert_eq!(result, "testnet-0.1.3-x86_64-unknown-linux-musl.tar.gz");
         Ok(())
     }
 }

@@ -16,13 +16,14 @@ use github::GithubReleaseRepository;
 use install::{AssetType, Settings};
 use s3::S3AssetRepository;
 use std::env::consts::{ARCH, OS};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const GITHUB_API_URL: &str = "https://api.github.com";
 const ORG_NAME: &str = "maidsafe";
 const REPO_NAME: &str = "safe_network";
 const SAFE_BUCKET_NAME: &str = "https://sn-cli.s3.eu-west-2.amazonaws.com";
 const SAFENODE_BUCKET_NAME: &str = "https://sn-node.s3.eu-west-2.amazonaws.com";
+const TESTNET_BUCKET_NAME: &str = "https://sn-testnet.s3.eu-west-2.amazonaws.com";
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -75,6 +76,27 @@ enum Commands {
         #[arg(short = 'v', long)]
         version: Option<String>,
     },
+    /// Install the latest version of testnet.
+    ///
+    /// The default install path is /usr/local/bin if you run safeup as root, or ~/.safe/node if you
+    /// run as the current user.
+    ///
+    /// If running as the current user, the shell profile will be modified to put safe on PATH.
+    Testnet {
+        /// Override the default installation path.
+        ///
+        /// Any directories that don't exist will be created.
+        #[arg(short = 'p', long, value_name = "DIRECTORY")]
+        path: Option<PathBuf>,
+
+        /// Disable modification of the shell profile.
+        #[arg(short = 'n', long)]
+        no_modify_shell_profile: bool,
+
+        /// Install a specific version rather than the latest.
+        #[arg(short = 'v', long)]
+        version: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -109,6 +131,20 @@ async fn main() -> Result<()> {
             )
             .await
         }
+        Some(Commands::Testnet {
+            path,
+            no_modify_shell_profile,
+            version,
+        }) => {
+            install(
+                AssetType::Testnet,
+                TESTNET_BUCKET_NAME,
+                path,
+                version,
+                no_modify_shell_profile,
+            )
+            .await
+        }
         None => {
             println!("interactive gui");
             Ok(())
@@ -136,6 +172,7 @@ async fn install(
         let dir = match asset_type {
             AssetType::Client => "cli",
             AssetType::Node => "node",
+            AssetType::Testnet => "node",
         };
         safe_dir_path.join(dir)
     };
@@ -165,6 +202,7 @@ async fn install(
     match asset_type {
         AssetType::Client => settings.safe_path = bin_path,
         AssetType::Node => settings.safenode_path = bin_path,
+        AssetType::Testnet => settings.testnet_path = bin_path,
     }
     settings.save(&settings_file_path)?;
 
@@ -220,18 +258,18 @@ fn is_running_elevated() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn get_shell_profile_path(home_dir_path: &PathBuf) -> PathBuf {
+fn get_shell_profile_path(home_dir_path: &Path) -> PathBuf {
     home_dir_path.join(".bashrc")
 }
 
 /// We won't actually end up doing anything on Windows with the shell profile, so we can just
 /// return back the home directory.
 #[cfg(target_os = "windows")]
-fn get_shell_profile_path(home_dir_path: &PathBuf) -> PathBuf {
-    home_dir_path
+fn get_shell_profile_path(home_dir_path: &Path) -> PathBuf {
+    home_dir_path.to_path_buf()
 }
 
 #[cfg(target_os = "macos")]
-fn get_shell_profile_path(home_dir_path: &PathBuf) -> PathBuf {
+fn get_shell_profile_path(home_dir_path: &Path) -> PathBuf {
     home_dir_path.join(".zshrc")
 }

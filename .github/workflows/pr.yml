@@ -113,6 +113,7 @@ jobs:
         run: |
           cargo run -- client --version 0.74.2
           cargo run -- node --version 0.80.3
+          cargo run -- testnet --version 0.1.4
       - name: Check if safe is available in new shell session
         shell: bash
         run: |
@@ -125,15 +126,31 @@ jobs:
           # locations.
           source ~/.safe/env
 
+          [[ -f "$HOME/.safe/cli/safe" ]] || { echo "safe not in expected location"; exit 1; }
+          [[ -f "$HOME/.safe/node/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
+          [[ -f "$HOME/.safe/node/testnet" ]] || { echo "testnet not in expected location"; exit 1; }
+
           version=$(safe --version | awk '{ print $2 }')
-          if [[ "$version" != "0.74.2" ]]; then
+          if [[ "$version" == "0.74.2" ]]; then
+            echo "The correct version of safe has been installed"
+          else
             echo "The correct version of safe has not been installed"
             exit 1
           fi
 
           version=$(safenode --version | awk '{ print $2 }')
-          if [[ "$version" != "0.80.3" ]]; then
+          if [[ "$version" == "0.80.3" ]]; then
+            echo "The correct version of safenode has been installed"
+          else
             echo "The correct version of safenode has not been installed"
+            exit 1
+          fi
+
+          version=$(testnet --version | awk '{ print $2 }')
+          if [[ "$version" == "0.1.4" ]]; then
+            echo "The correct version of testnet has been installed"
+          else
+            echo "The correct version of testnet has not been installed"
             exit 1
           fi
 
@@ -154,9 +171,11 @@ jobs:
           cargo build --release
           sudo ./target/release/safeup client --version 0.74.2
           sudo ./target/release/safeup node --version 0.80.3
+          sudo ./target/release/safeup testnet --version 0.1.4
 
           [[ -f "/usr/local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
           [[ -f "/usr/local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
+          [[ -f "/usr/local/bin/testnet" ]] || { echo "testnet not in expected location"; exit 1; }
 
           # Due to installation at /usr/local/bin, the binaries should be
           # immediately available in the same shell session.
@@ -173,6 +192,14 @@ jobs:
             echo "The correct version of safenode has been installed"
           else
             echo "The correct version of safenode has not been installed"
+            exit 1
+          fi
+
+          version=$(testnet --version | awk '{ print $2 }')
+          if [[ "$version" == "0.1.4" ]]; then
+            echo "The correct version of testnet has been installed"
+          else
+            echo "The correct version of testnet has not been installed"
             exit 1
           fi
 
@@ -193,9 +220,11 @@ jobs:
         run: |
           cargo run -- client --version 0.74.2
           cargo run -- node --version 0.80.3
+          cargo run -- testnet --version 0.1.4
 
           [[ -f "/usr/local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
           [[ -f "/usr/local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
+          [[ -f "/usr/local/bin/testnet" ]] || { echo "testnet not in expected location"; exit 1; }
 
           version=$(safe --version | awk '{ print $2 }')
           if [[ "$version" == "0.74.2" ]]; then
@@ -210,6 +239,14 @@ jobs:
             echo "The correct version of safenode has been installed"
           else
             echo "The correct version of safenode has not been installed"
+            exit 1
+          fi
+
+          version=$(testnet --version | awk '{ print $2 }')
+          if [[ "$version" == "0.1.4" ]]; then
+            echo "The correct version of testnet has been installed"
+          else
+            echo "The correct version of testnet has not been installed"
             exit 1
           fi
 
