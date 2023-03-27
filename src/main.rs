@@ -13,7 +13,7 @@ mod s3;
 use clap::{Parser, Subcommand};
 use color_eyre::{eyre::eyre, Result};
 use github::GithubReleaseRepository;
-use install::AssetType;
+use install::{AssetType, Settings};
 use s3::S3AssetRepository;
 use std::env::consts::{ARCH, OS};
 use std::path::PathBuf;
@@ -127,6 +127,7 @@ async fn install(
     let running_elevated = is_running_elevated();
     let home_dir_path =
         dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
+    let safe_dir_path = home_dir_path.join(".safe");
     let dest_dir_path = if let Some(path) = path {
         path
     } else if running_elevated {
@@ -136,13 +137,13 @@ async fn install(
             AssetType::Client => "cli",
             AssetType::Node => "node",
         };
-        home_dir_path.join(".safe").join(dir)
+        safe_dir_path.join(dir)
     };
 
     let release_repository = GithubReleaseRepository::new(GITHUB_API_URL, ORG_NAME, REPO_NAME);
     let asset_repository = S3AssetRepository::new(bucket_name);
-    install::install_bin(
-        asset_type,
+    let (_, bin_path) = install::install_bin(
+        asset_type.clone(),
         release_repository,
         asset_repository,
         &platform,
@@ -158,6 +159,14 @@ async fn install(
         )
         .await?
     }
+
+    let settings_file_path = safe_dir_path.join("safeup.json");
+    let mut settings = Settings::read(&settings_file_path)?;
+    match asset_type {
+        AssetType::Client => settings.safe_path = bin_path,
+        AssetType::Node => settings.safenode_path = bin_path,
+    }
+    settings.save(&settings_file_path)?;
 
     Ok(())
 }
