@@ -12,8 +12,9 @@ use color_eyre::{eyre::eyre, Result};
 use flate2::read::GzDecoder;
 #[cfg(unix)]
 use indoc::indoc;
+use serde_derive::{Deserialize, Serialize};
 use std::env::consts::OS;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 #[cfg(unix)]
 use std::io::prelude::*;
 use std::io::BufWriter;
@@ -37,9 +38,49 @@ const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
     esac
 "#};
 
+#[derive(Clone)]
 pub enum AssetType {
     Client,
     Node,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Settings {
+    pub safe_path: PathBuf,
+    pub safenode_path: PathBuf,
+    pub testnet_path: PathBuf,
+}
+
+impl Settings {
+    pub fn read(settings_file_path: &PathBuf) -> Result<Settings> {
+        let settings = if let Ok(mut file) = File::open(settings_file_path) {
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            serde_json::from_str(&contents).unwrap_or_else(|_| Settings {
+                safe_path: PathBuf::new(),
+                safenode_path: PathBuf::new(),
+                testnet_path: PathBuf::new(),
+            })
+        } else {
+            Settings {
+                safe_path: PathBuf::new(),
+                safenode_path: PathBuf::new(),
+                testnet_path: PathBuf::new(),
+            }
+        };
+        Ok(settings)
+    }
+
+    pub fn save(&self, settings_file_path: &PathBuf) -> Result<()> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(settings_file_path)?;
+        let json = serde_json::to_string(&self)?;
+        file.write_all(json.as_bytes())?;
+        Ok(())
+    }
 }
 
 /// Installs either the `safe` or `safenode` binary for the platform specified.
@@ -58,7 +99,7 @@ pub enum AssetType {
 ///
 /// # Returns
 ///
-/// The version number of the installed binary.
+/// A tuple of the version number and full path of the installed binary.
 pub async fn install_bin(
     asset_type: AssetType,
     release_repository: GithubReleaseRepository,
@@ -66,7 +107,7 @@ pub async fn install_bin(
     platform: &str,
     dest_dir_path: PathBuf,
     version: Option<String>,
-) -> Result<String> {
+) -> Result<(String, PathBuf)> {
     let bin_name = get_bin_name(&asset_type);
     println!(
         "Installing {bin_name} for {platform} at {}...",
@@ -110,11 +151,12 @@ pub async fn install_bin(
         std::fs::set_permissions(extracted_binary_path, perms)?;
     }
 
+    let bin_path = dest_dir_path.join(bin_name.clone());
     let dest_dir_path = dest_dir_path
         .to_str()
         .ok_or_else(|| eyre!("Could not obtain path for shell profile"))?;
-    println!("{bin_name} {version} is now available at {dest_dir_path}/safe");
-    Ok(version)
+    println!("{bin_name} {version} is now available at {dest_dir_path}/{bin_name}");
+    Ok((version, bin_path))
 }
 
 #[cfg(unix)]
@@ -182,7 +224,7 @@ fn get_bin_name(asset_type: &AssetType) -> String {
 #[cfg(test)]
 mod test {
     #[cfg(unix)]
-    use super::{configure_shell_profile, install_bin, AssetType, SET_PATH_FILE_CONTENT};
+    use super::{configure_shell_profile, install_bin, AssetType, Settings, SET_PATH_FILE_CONTENT};
     #[cfg(windows)]
     use super::{install_bin, AssetType};
     use crate::github::GithubReleaseRepository;
@@ -195,7 +237,7 @@ mod test {
     use std::fs::File;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     #[tokio::test]
     async fn install_bin_should_install_the_latest_version() -> Result<()> {
@@ -243,7 +285,7 @@ mod test {
         let asset_repository = S3AssetRepository::new(&asset_server.base_url());
         let release_repository =
             GithubReleaseRepository::new(&github_server.base_url(), "maidsafe", "safe_network");
-        let version = install_bin(
+        let (version, bin_path) = install_bin(
             AssetType::Client,
             release_repository,
             asset_repository,
@@ -258,6 +300,7 @@ mod test {
         extracted_safe.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
         assert_eq!(version, "0.74.2");
+        assert_eq!(bin_path, extracted_safe.to_path_buf());
 
         #[cfg(unix)]
         {
@@ -277,7 +320,6 @@ mod test {
         let response_body = std::fs::read_to_string(
             Path::new("resources").join("latest_release_response_body.json"),
         )?;
-
         let latest_release_mock = github_server.mock(|when, then| {
             when.method(GET)
                 .path("/repos/maidsafe/safe_network/releases/latest");
@@ -316,7 +358,7 @@ mod test {
         let asset_repository = S3AssetRepository::new(&asset_server.base_url());
         let release_repository =
             GithubReleaseRepository::new(&github_server.base_url(), "maidsafe", "safe_network");
-        let version = install_bin(
+        let (version, bin_path) = install_bin(
             AssetType::Client,
             release_repository,
             asset_repository,
@@ -331,6 +373,7 @@ mod test {
         extracted_safe.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
         assert_eq!(version, "0.74.2");
+        assert_eq!(bin_path, extracted_safe.to_path_buf());
         Ok(())
     }
 
@@ -372,7 +415,7 @@ mod test {
         let asset_repository = S3AssetRepository::new(&asset_server.base_url());
         let release_repository =
             GithubReleaseRepository::new("localhost", "maidsafe", "safe_network");
-        let version = install_bin(
+        let (version, bin_path) = install_bin(
             AssetType::Client,
             release_repository,
             asset_repository,
@@ -386,6 +429,7 @@ mod test {
         extracted_safe.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
         assert_eq!(version, specific_version);
+        assert_eq!(bin_path, extracted_safe.to_path_buf());
 
         Ok(())
     }
@@ -450,6 +494,66 @@ mod test {
                 .count()
         );
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn save_should_write_new_settings_when_settings_file_does_not_exist() -> Result<()> {
+        let tmp_data_path = assert_fs::TempDir::new()?;
+        let settings_file = tmp_data_path.child("safeup.json");
+        let safe_bin_file = tmp_data_path.child("safe");
+        safe_bin_file.write_binary(b"fake safe code")?;
+        let safenode_bin_file = tmp_data_path.child("safenode");
+        safenode_bin_file.write_binary(b"fake safenode code")?;
+        let testnet_bin_file = tmp_data_path.child("testnet");
+        testnet_bin_file.write_binary(b"fake testnet code")?;
+
+        let settings = Settings {
+            safe_path: safe_bin_file.to_path_buf(),
+            safenode_path: safenode_bin_file.to_path_buf(),
+            testnet_path: testnet_bin_file.to_path_buf(),
+        };
+
+        settings.save(&settings_file.to_path_buf())?;
+
+        settings_file.assert(predicates::path::is_file());
+        let settings = Settings::read(&settings_file.to_path_buf())?;
+        assert_eq!(settings.safe_path, safe_bin_file.to_path_buf());
+        assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
+        assert_eq!(settings.testnet_path, testnet_bin_file.to_path_buf());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn save_should_write_updated_settings() -> Result<()> {
+        let tmp_data_path = assert_fs::TempDir::new()?;
+        let settings_file = tmp_data_path.child("safeup.json");
+        settings_file.write_str(
+            r#"
+        {
+          "safe_path": "/usr/local/bin/safe",
+          "safenode_path": "/usr/local/bin/safenode",
+          "testnet_path": "/usr/local/bin/testnet"
+        }
+        "#,
+        )?;
+
+        let safenode_bin_file = tmp_data_path.child("safenode");
+        safenode_bin_file.write_binary(b"fake safenode code")?;
+
+        let mut settings = Settings::read(&settings_file.to_path_buf())?;
+        settings.safenode_path = safenode_bin_file.to_path_buf();
+
+        settings.save(&settings_file.to_path_buf())?;
+
+        settings_file.assert(predicates::path::is_file());
+        let settings = Settings::read(&settings_file.to_path_buf())?;
+        assert_eq!(settings.safe_path, PathBuf::from("/usr/local/bin/safe"));
+        assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
+        assert_eq!(
+            settings.testnet_path,
+            PathBuf::from("/usr/local/bin/testnet")
+        );
         Ok(())
     }
 }
