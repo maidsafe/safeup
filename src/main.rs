@@ -154,7 +154,7 @@ async fn install(
 
     if !running_elevated && !no_modify_shell_profile {
         install::configure_shell_profile(
-            &home_dir_path.join(".bashrc"),
+            &get_shell_profile_path(&home_dir_path),
             &home_dir_path.join(".safe").join("env"),
         )
         .await?
@@ -217,4 +217,21 @@ fn is_running_elevated() -> bool {
 #[cfg(target_os = "windows")]
 fn is_running_elevated() -> bool {
     false
+}
+
+#[cfg(target_os = "linux")]
+fn get_shell_profile_path(home_dir_path: &PathBuf) -> PathBuf {
+    home_dir_path.join(".bashrc")
+}
+
+/// We won't actually end up doing anything on Windows with the shell profile, so we can just
+/// return back the home directory.
+#[cfg(target_os = "windows")]
+fn get_shell_profile_path(home_dir_path: &PathBuf) -> PathBuf {
+    home_dir_path
+}
+
+#[cfg(target_os = "macos")]
+fn get_shell_profile_path(home_dir_path: &PathBuf) -> PathBuf {
+    home_dir_path.join(".zshrc")
 }
