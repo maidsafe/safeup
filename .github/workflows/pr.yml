@@ -97,6 +97,73 @@ jobs:
           command: test
           args: --release
 
+  test-non-elevated-install-windows:
+    if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
+    name: Install test non-elevated (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Install binaries
+        shell: pwsh
+        run: |
+          cargo run -- client --version 0.74.2
+          cargo run -- node --version 0.80.3
+          cargo run -- testnet --version 0.1.4
+      - name: Check if safe is available in new shell session
+        shell: pwsh
+        run: |
+          if (!(Test-Path "$env:USERPROFILE\.safe\cli\safe.exe")) {
+            Write-Host "safe.exe does not exist"
+            exit 1
+          }
+          if (!(Test-Path "$env:USERPROFILE\.safe\node\safenode.exe")) {
+            Write-Host "safenode.exe does not exist"
+            exit 1
+          }
+          if (!(Test-Path "$env:USERPROFILE\.safe\node\testnet.exe")) {
+            Write-Host "testnet.exe does not exist"
+            exit 1
+          }
+
+          # For security reasons, the GHA infrastructure prevents environment variables
+          # being modified easily, so we need to refer to the binaries with their full paths.
+          # Other manual testing has proven that the changes to the Path environment variable do
+          # take effect.
+          $output = & "${env:USERPROFILE}\.safe\cli\safe.exe" --version
+          $version = $output | Select-String -Pattern "sn_cli (\d+\.\d+\.\d+)"
+          $versionNumber = $version.Matches.Groups[1].Value
+          if ($versionNumber -eq "0.74.2") {
+            Write-Host "The correct version of safe has been installed"
+          } else {
+            Write-Host "The correct version of safe has not been installed"
+            exit 1
+          }
+
+          $output = & "${env:USERPROFILE}\.safe\node\safenode.exe" --version
+          $version = $output | Select-String -Pattern "sn_node (\d+\.\d+\.\d+)"
+          $versionNumber = $version.Matches.Groups[1].Value
+          if ($versionNumber -eq "0.80.3") {
+            Write-Host "The correct version of safenode has been installed"
+          } else {
+            Write-Host "The correct version of safenode has not been installed"
+            exit 1
+          }
+
+          $output = & "${env:USERPROFILE}\.safe\node\testnet.exe" --version
+          $version = $output | Select-String -Pattern "testnet (\d+\.\d+\.\d+)"
+          $versionNumber = $version.Matches.Groups[1].Value
+          if ($versionNumber -eq "0.1.4") {
+            Write-Host "The correct version of testnet has been installed"
+          } else {
+            Write-Host "The correct version of testnet has not been installed"
+            exit 1
+          }
+
   test-non-elevated-install-linux:
     if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
     name: Install test non-elevated (Linux)
