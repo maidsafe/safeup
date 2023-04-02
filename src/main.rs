@@ -201,7 +201,9 @@ async fn install(
         .await?
     }
 
-    let settings_file_path = safe_dir_path.join("safeup.json");
+    let config_dir_path =
+        dirs_next::config_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
+    let settings_file_path = config_dir_path.join(".safe").join("safeup.json");
     let mut settings = Settings::read(&settings_file_path)?;
     match asset_type {
         AssetType::Client => settings.safe_path = bin_path,
