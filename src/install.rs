@@ -8,7 +8,10 @@
 
 use crate::github::GithubReleaseRepository;
 use crate::s3::S3AssetRepository;
+#[cfg(windows)]
 use color_eyre::{eyre::eyre, Help, Result};
+#[cfg(unix)]
+use color_eyre::{eyre::eyre, Result};
 use flate2::read::GzDecoder;
 #[cfg(unix)]
 use indoc::indoc;
@@ -22,7 +25,7 @@ use std::io::BufWriter;
 use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tar::Archive;
 #[cfg(windows)]
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_SET_VALUE};
@@ -208,7 +211,7 @@ pub async fn install_bin(
 
 #[cfg(unix)]
 pub async fn configure_shell_profile(
-    _dest_dir_path: &PathBuf,
+    _dest_dir_path: &Path,
     shell_profile_file_path: &PathBuf,
     path_config_file_path: &PathBuf,
 ) -> Result<()> {
@@ -246,15 +249,15 @@ pub async fn configure_shell_profile(
 #[cfg(windows)]
 pub async fn configure_shell_profile(
     dest_dir_path: &PathBuf,
-    _shell_profile_file_path: &PathBuf,
-    _path_config_file_path: &PathBuf,
+    _shell_profile_file_path: &Path,
+    _path_config_file_path: &Path,
 ) -> Result<()> {
     let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Environment")?;
     let path_var: String = key.get_value("Path")?;
     let paths: Vec<PathBuf> = std::env::split_paths(&path_var).collect();
 
-    if !paths.contains(&dest_dir_path) {
-        let mut new_paths = paths.clone();
+    if !paths.contains(dest_dir_path) {
+        let mut new_paths = paths;
         new_paths.push(dest_dir_path.clone());
 
         let new_path_var = std::env::join_paths(new_paths.iter())?;
@@ -528,11 +531,15 @@ mod test {
     #[tokio::test]
     async fn configure_shell_profile_should_put_client_and_node_on_path() -> Result<()> {
         let tmp_data_path = assert_fs::TempDir::new()?;
+        // The destination directory doesn't actually get used on Linux/macOS, but it needs
+        // to be provided anyway.
+        let dest_dir = tmp_data_path.child("dest");
         let bashrc_file = tmp_data_path.child(".bashrc");
         bashrc_file.write_file(Path::new("resources/default_bashrc"))?;
         let path_config_file = tmp_data_path.child("env");
 
         let result = configure_shell_profile(
+            dest_dir.path(),
             &bashrc_file.path().to_path_buf(),
             &path_config_file.path().to_path_buf(),
         )
@@ -555,11 +562,15 @@ mod test {
     #[tokio::test]
     async fn configure_shell_profile_should_not_put_duplicate_entries_in_profile() -> Result<()> {
         let tmp_data_path = assert_fs::TempDir::new()?;
+        // The destination directory doesn't actually get used on Linux/macOS, but it needs
+        // to be provided anyway.
+        let dest_dir = tmp_data_path.child("dest");
         let bashrc_file = tmp_data_path.child(".bashrc");
         bashrc_file.write_file(Path::new("resources/default_bashrc"))?;
         let path_config_file = tmp_data_path.child("env");
 
         let result = configure_shell_profile(
+            dest_dir.path(),
             &bashrc_file.path().to_path_buf(),
             &path_config_file.path().to_path_buf(),
         )
@@ -567,6 +578,7 @@ mod test {
         assert!(result.is_ok());
 
         let result = configure_shell_profile(
+            dest_dir.path(),
             &bashrc_file.path().to_path_buf(),
             &path_config_file.path().to_path_buf(),
         )
