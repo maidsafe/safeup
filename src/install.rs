@@ -8,7 +8,7 @@
 
 use crate::github::GithubReleaseRepository;
 use crate::s3::S3AssetRepository;
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::{eyre::eyre, Help, Result};
 use flate2::read::GzDecoder;
 #[cfg(unix)]
 use indoc::indoc;
@@ -24,6 +24,13 @@ use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use tar::Archive;
+#[cfg(windows)]
+use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_SET_VALUE};
+#[cfg(windows)]
+use winreg::RegKey;
+
+#[cfg(windows)]
+const VCPP_REDIST_URL: &str = "https://download.microsoft.com/download/9/3/F/93FCF1E7-E6A4-478B-96E7-D4B285925B00/vc_redist.x64.exe";
 
 #[cfg(unix)]
 const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
@@ -88,6 +95,39 @@ impl Settings {
         file.write_all(json.as_bytes())?;
         Ok(())
     }
+}
+
+#[cfg(unix)]
+pub fn check_prerequisites() -> Result<()> {
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn check_prerequisites() -> Result<()> {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let uninstall_key_path = "Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+
+    let uninstall_key = hklm.open_subkey_with_flags(uninstall_key_path, KEY_READ)?;
+    for result in uninstall_key.enum_keys().map(|res| res.unwrap()) {
+        let subkey = match uninstall_key.open_subkey_with_flags(&result, KEY_READ) {
+            Ok(key) => key,
+            Err(_) => continue,
+        };
+
+        if let Ok(display_name) = subkey.get_value::<String, _>("DisplayName") {
+            if display_name.starts_with("Microsoft Visual C++") {
+                return Ok(());
+            }
+        }
+    }
+
+    Err(
+        eyre!("Failed to find installation of the Microsoft Visual C++ Redistributable")
+            .suggestion(format!(
+                "Please download and install it from {VCPP_REDIST_URL} \
+                    then proceed with the installation."
+            )),
+    )
 }
 
 /// Installs either the `safe` or `safenode` binary for the platform specified.
@@ -159,15 +199,16 @@ pub async fn install_bin(
     }
 
     let bin_path = dest_dir_path.join(bin_name.clone());
-    let dest_dir_path = dest_dir_path
+    let full_path = bin_path
         .to_str()
         .ok_or_else(|| eyre!("Could not obtain path for shell profile"))?;
-    println!("{bin_name} {version} is now available at {dest_dir_path}/{bin_name}");
+    println!("{bin_name} {version} is now available at {full_path}");
     Ok((version, bin_path))
 }
 
 #[cfg(unix)]
 pub async fn configure_shell_profile(
+    _dest_dir_path: &PathBuf,
     shell_profile_file_path: &PathBuf,
     path_config_file_path: &PathBuf,
 ) -> Result<()> {
@@ -204,9 +245,32 @@ pub async fn configure_shell_profile(
 
 #[cfg(windows)]
 pub async fn configure_shell_profile(
+    dest_dir_path: &PathBuf,
     _shell_profile_file_path: &PathBuf,
     _path_config_file_path: &PathBuf,
 ) -> Result<()> {
+    let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey("Environment")?;
+    let path_var: String = key.get_value("Path")?;
+    let paths: Vec<PathBuf> = std::env::split_paths(&path_var).collect();
+
+    if !paths.contains(&dest_dir_path) {
+        let mut new_paths = paths.clone();
+        new_paths.push(dest_dir_path.clone());
+
+        let new_path_var = std::env::join_paths(new_paths.iter())?;
+        let new_path_var_str = new_path_var
+            .to_str()
+            .ok_or_else(|| eyre!("Could not obtain path"))?;
+        let key = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey_with_flags("Environment", KEY_SET_VALUE)?;
+        key.set_value("PATH", &new_path_var_str)?;
+
+        let install_path = dest_dir_path
+            .to_str()
+            .ok_or_else(|| eyre!("Could not obtain path for shell profile"))?;
+        println!("Adding {install_path} to the user Path environment variable");
+        println!("A new shell session will be required for this to take effect");
+    }
     Ok(())
 }
 

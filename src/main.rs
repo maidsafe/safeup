@@ -108,6 +108,7 @@ async fn main() -> Result<()> {
             no_modify_shell_profile,
             version,
         }) => {
+            install::check_prerequisites()?;
             install(
                 AssetType::Client,
                 SAFE_BUCKET_NAME,
@@ -122,6 +123,7 @@ async fn main() -> Result<()> {
             no_modify_shell_profile,
             version,
         }) => {
+            install::check_prerequisites()?;
             install(
                 AssetType::Node,
                 SAFENODE_BUCKET_NAME,
@@ -136,6 +138,7 @@ async fn main() -> Result<()> {
             no_modify_shell_profile,
             version,
         }) => {
+            install::check_prerequisites()?;
             install(
                 AssetType::Testnet,
                 TESTNET_BUCKET_NAME,
@@ -191,6 +194,7 @@ async fn install(
 
     if !running_elevated && !no_modify_shell_profile {
         install::configure_shell_profile(
+            &dest_dir_path.clone(),
             &get_shell_profile_path(&home_dir_path),
             &home_dir_path.join(".safe").join("env"),
         )
