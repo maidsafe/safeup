@@ -322,6 +322,9 @@ mod test {
     use std::fs::File;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+    #[cfg(windows)]
+    use std::path::PathBuf;
+    #[cfg(unix)]
     use std::path::{Path, PathBuf};
 
     /// These may seem pointless, but they are useful for when the tests run on different
