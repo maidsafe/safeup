@@ -50,11 +50,21 @@ const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
     esac
 "#};
 
-#[derive(Clone)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub enum AssetType {
     Client,
     Node,
     Testnet,
+}
+
+impl std::fmt::Display for AssetType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match *self {
+            AssetType::Client => write!(f, "Client"),
+            AssetType::Node => write!(f, "Node"),
+            AssetType::Testnet => write!(f, "Testnet"),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -332,16 +342,26 @@ mod test {
     #[tokio::test]
     async fn install_bin_should_install_the_latest_version() -> Result<()> {
         let github_server = MockServer::start();
-        let response_body = std::fs::read_to_string(
-            Path::new("resources").join("latest_release_response_body.json"),
+        let releases_response_body = std::fs::read_to_string(
+            std::path::Path::new("resources").join("releases_response_body.json"),
         )?;
-
-        let latest_release_mock = github_server.mock(|when, then| {
+        let releases_list_mock = github_server.mock(|when, then| {
             when.method(GET)
-                .path("/repos/maidsafe/safe_network/releases/latest");
+                .path("/repos/maidsafe/safe_network/releases");
             then.status(200)
                 .header("server", "Github.com")
-                .body(response_body);
+                .body(releases_response_body);
+        });
+
+        let sn_cli_response_body = std::fs::read_to_string(
+            std::path::Path::new("resources").join("sn_cli_release_response_body.json"),
+        )?;
+        let release_by_tag_mock = github_server.mock(|when, then| {
+            when.method(GET)
+                .path("/repos/maidsafe/safe_network/releases/tags/sn_cli-v0.77.13");
+            then.status(200)
+                .header("server", "Github.com")
+                .body(sn_cli_response_body);
         });
 
         let tmp_data_path = assert_fs::TempDir::new()?;
@@ -350,7 +370,8 @@ mod test {
         let extracted_safe_bin = extract_dir.child(SAFE_BIN_NAME);
 
         let safe_archive = tmp_data_path.child("safe.tar.gz");
-        let downloaded_safe_archive = extract_dir.child(format!("safe-0.74.2-{}.tar.gz", PLATFORM));
+        let downloaded_safe_archive =
+            extract_dir.child(format!("safe-0.77.13-{}.tar.gz", PLATFORM));
         let fake_safe_bin = tmp_data_path.child(SAFE_BIN_NAME);
         fake_safe_bin.write_binary(b"fake code")?;
 
@@ -364,7 +385,7 @@ mod test {
         let asset_server = MockServer::start();
         let download_asset_mock = asset_server.mock(|when, then| {
             when.method(GET)
-                .path(format!("/safe-0.74.2-{}.tar.gz", PLATFORM));
+                .path(format!("/safe-0.77.13-{}.tar.gz", PLATFORM));
             then.status(200)
                 .header("Content-Length", safe_archive_metadata.len().to_string())
                 .header("Content-Type", "application/gzip")
@@ -385,10 +406,11 @@ mod test {
         .await?;
 
         download_asset_mock.assert();
-        latest_release_mock.assert();
+        releases_list_mock.assert();
+        release_by_tag_mock.assert();
         extracted_safe_bin.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
-        assert_eq!(version, "0.74.2");
+        assert_eq!(version, "0.77.13");
         assert_eq!(bin_path, extracted_safe_bin.to_path_buf());
 
         #[cfg(unix)]
@@ -406,17 +428,27 @@ mod test {
     async fn install_bin_when_parent_dirs_in_dest_path_do_not_exist_should_install_the_latest_version(
     ) -> Result<()> {
         let github_server = MockServer::start();
-        let response_body = std::fs::read_to_string(
-            Path::new("resources").join("latest_release_response_body.json"),
+        let releases_response_body = std::fs::read_to_string(
+            std::path::Path::new("resources").join("releases_response_body.json"),
         )?;
-        let latest_release_mock = github_server.mock(|when, then| {
+        let releases_list_mock = github_server.mock(|when, then| {
             when.method(GET)
-                .path("/repos/maidsafe/safe_network/releases/latest");
+                .path("/repos/maidsafe/safe_network/releases");
             then.status(200)
                 .header("server", "Github.com")
-                .body(response_body);
+                .body(releases_response_body);
         });
 
+        let sn_cli_response_body = std::fs::read_to_string(
+            std::path::Path::new("resources").join("sn_cli_release_response_body.json"),
+        )?;
+        let release_by_tag_mock = github_server.mock(|when, then| {
+            when.method(GET)
+                .path("/repos/maidsafe/safe_network/releases/tags/sn_cli-v0.77.13");
+            then.status(200)
+                .header("server", "Github.com")
+                .body(sn_cli_response_body);
+        });
         let tmp_data_path = assert_fs::TempDir::new()?;
         let extract_dir = tmp_data_path.child(
             PathBuf::from("extract")
@@ -429,7 +461,8 @@ mod test {
         let extracted_safe_bin = extract_dir.child(SAFE_BIN_NAME);
 
         let safe_archive = tmp_data_path.child("safe.tar.gz");
-        let downloaded_safe_archive = extract_dir.child(format!("safe-0.74.2-{}.tar.gz", PLATFORM));
+        let downloaded_safe_archive =
+            extract_dir.child(format!("safe-0.77.13-{}.tar.gz", PLATFORM));
         let fake_safe_bin = tmp_data_path.child(SAFE_BIN_NAME);
         fake_safe_bin.write_binary(b"fake code")?;
 
@@ -443,7 +476,7 @@ mod test {
         let asset_server = MockServer::start();
         let download_asset_mock = asset_server.mock(|when, then| {
             when.method(GET)
-                .path(format!("/safe-0.74.2-{}.tar.gz", PLATFORM));
+                .path(format!("/safe-0.77.13-{}.tar.gz", PLATFORM));
             then.status(200)
                 .header("Content-Length", safe_archive_metadata.len().to_string())
                 .header("Content-Type", "application/gzip")
@@ -464,10 +497,11 @@ mod test {
         .await?;
 
         download_asset_mock.assert();
-        latest_release_mock.assert();
+        releases_list_mock.assert();
+        release_by_tag_mock.assert();
         extracted_safe_bin.assert(predicates::path::is_file());
         downloaded_safe_archive.assert(predicates::path::missing());
-        assert_eq!(version, "0.74.2");
+        assert_eq!(version, "0.77.13");
         assert_eq!(bin_path, extracted_safe_bin.to_path_buf());
         Ok(())
     }
