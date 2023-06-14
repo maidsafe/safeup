@@ -1,0 +1,59 @@
+name: bump version
+on:
+  push:
+    branches:
+      - main
+env:
+  RELEASE_PLZ_BIN_URL: https://github.com/MarcoIeni/release-plz/releases/download/release-plz-v0.3.11/release-plz-x86_64-unknown-linux-gnu.tar.gz
+jobs:
+  bump_version:
+    if: |
+      github.repository_owner == 'jacderida' &&
+      !startsWith(github.event.head_commit.message, 'chore: release')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: "0"
+          token: ${{ secrets.RELEASE_PAT }}
+      - uses: actions-rs/toolchain@v1
+        id: toolchain
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: configure git for release
+        shell: bash
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+      # It's possible to `cargo install` release-plz, but it's very slow to compile on GHA infra.
+      # Therefore we just pull the binary from the Github Release.
+      - name: install release-plz
+        shell: bash
+        run: |
+          set -e
+          curl -L -O $RELEASE_PLZ_BIN_URL
+          tar xvf release-plz-x86_64-unknown-linux-gnu.tar.gz
+          rm release-plz-x86_64-unknown-linux-gnu.tar.gz
+          sudo mv release-plz /usr/local/bin
+      - name: bump version
+        shell: bash
+        run: |
+          set -e
+          release-plz update
+          if [[ -z $(git status --porcelain) ]]; then
+            echo "No changes were detected. Exiting without bumping the version."
+            exit 0
+          fi
+          version=$(cat Cargo.toml | grep "^version" | awk -F '=' '{ print $2 }' | xargs)
+          commit_message="chore(release): $version"
+          git add --all
+          git commit -m "$commit_message"
+          echo "Generated release commit $commit_message"
+      - name: push version bump commit
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.RELEASE_PAT }}
+          branch: main
+          tags: true
