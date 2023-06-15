@@ -16,7 +16,7 @@ use github::GithubReleaseRepository;
 use install::{AssetType, Settings};
 use s3::S3AssetRepository;
 use std::env::consts::{ARCH, OS};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const GITHUB_API_URL: &str = "https://api.github.com";
 const ORG_NAME: &str = "maidsafe";
@@ -36,10 +36,10 @@ struct Cli {
 enum Commands {
     /// Install the latest version of safe.
     ///
-    /// If running as root, the default install path is /usr/local/bin; otherwise it will be
-    /// ~/.safe/cli.
+    /// If running without elevated privileges, safe will be installed to $HOME/.local/bin, and
+    /// the shell profile will be modified to put this location on PATH.
     ///
-    /// If running as the current user, the shell profile will be modified to put safe on PATH.
+    /// Otherwise safe will be installed to /usr/local/bin.
     Client {
         /// Override the default installation path.
         ///
@@ -57,10 +57,10 @@ enum Commands {
     },
     /// Install the latest version of safenode.
     ///
-    /// If running as root, the default install path is /usr/local/bin; otherwise it will be
-    /// ~/.safe/node.
+    /// If running without elevated privileges, safenode will be installed to $HOME/.local/bin, and
+    /// your shell profile will be modified to put this location on PATH.
     ///
-    /// If running as the current user, the shell profile will be modified to put safenode on PATH.
+    /// Otherwise safenode will be installed to /usr/local/bin.
     Node {
         /// Override the default installation path.
         ///
@@ -78,10 +78,10 @@ enum Commands {
     },
     /// Install the latest version of testnet.
     ///
-    /// If running as root, the default install path is /usr/local/bin; otherwise it will be
-    /// ~/.safe/node.
+    /// If running without elevated privileges, testnet will be installed to $HOME/.local/bin, and
+    /// your shell profile will be modified to put this location on PATH.
     ///
-    /// If running as the current user, the shell profile will be modified to put testnet on PATH.
+    /// Otherwise testnet will be installed to /usr/local/bin.
     Testnet {
         /// Override the default installation path.
         ///
@@ -164,20 +164,14 @@ async fn install(
 ) -> Result<()> {
     let platform = get_platform()?;
     let running_elevated = is_running_elevated();
-    let home_dir_path =
-        dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
-    let safe_dir_path = home_dir_path.join(".safe");
+    let safe_config_dir_path = get_safe_config_dir_path()?;
+
     let dest_dir_path = if let Some(path) = path {
         path
     } else if running_elevated {
         std::path::PathBuf::from("/usr/local/bin")
     } else {
-        let dir = match asset_type {
-            AssetType::Client => "cli",
-            AssetType::Node => "node",
-            AssetType::Testnet => "node",
-        };
-        safe_dir_path.join(dir)
+        get_install_dest_dir_path()?
     };
 
     let release_repository = GithubReleaseRepository::new(GITHUB_API_URL, ORG_NAME, REPO_NAME);
@@ -195,15 +189,13 @@ async fn install(
     if !running_elevated && !no_modify_shell_profile {
         install::configure_shell_profile(
             &dest_dir_path.clone(),
-            &get_shell_profile_path(&home_dir_path),
-            &home_dir_path.join(".safe").join("env"),
+            &get_shell_profile_path()?,
+            &safe_config_dir_path.join("env"),
         )
         .await?
     }
 
-    let config_dir_path =
-        dirs_next::config_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
-    let settings_file_path = config_dir_path.join(".safe").join("safeup.json");
+    let settings_file_path = safe_config_dir_path.join("safeup.json");
     let mut settings = Settings::read(&settings_file_path)?;
     match asset_type {
         AssetType::Client => settings.safe_path = bin_path,
@@ -264,18 +256,50 @@ fn is_running_elevated() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn get_shell_profile_path(home_dir_path: &Path) -> PathBuf {
-    home_dir_path.join(".bashrc")
+fn get_shell_profile_path() -> Result<PathBuf> {
+    let home_dir_path =
+        dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
+    Ok(home_dir_path.join(".bashrc"))
 }
 
 /// We won't actually end up doing anything on Windows with the shell profile, so we can just
 /// return back the home directory.
 #[cfg(target_os = "windows")]
-fn get_shell_profile_path(home_dir_path: &Path) -> PathBuf {
-    home_dir_path.to_path_buf()
+fn get_shell_profile_path() -> Result<PathBuf> {
+    let home_dir_path =
+        dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
+    Ok(home_dir_path.to_path_buf())
 }
 
 #[cfg(target_os = "macos")]
-fn get_shell_profile_path(home_dir_path: &Path) -> PathBuf {
-    home_dir_path.join(".zshrc")
+fn get_shell_profile_path() -> Result<PathBuf> {
+    let home_dir_path =
+        dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
+    Ok(home_dir_path.join(".zshrc"))
+}
+
+fn get_safe_config_dir_path() -> Result<PathBuf> {
+    let config_dir_path = dirs_next::config_dir()
+        .ok_or_else(|| eyre!("Could not retrieve user's config directory"))?;
+    let safe_config_dir_path = config_dir_path.join("safe");
+    std::fs::create_dir_all(safe_config_dir_path.clone())?;
+    Ok(safe_config_dir_path)
+}
+
+#[cfg(target_os = "windows")]
+fn get_install_dest_dir_path() -> Result<PathBuf> {
+    let home_dir_path =
+        dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
+    let safe_dir_path = home_dir_path.join("safe");
+    std::fs::create_dir_all(safe_dir_path.clone())?;
+    Ok(safe_dir_path)
+}
+
+#[cfg(target_family = "unix")]
+fn get_install_dest_dir_path() -> Result<PathBuf> {
+    let home_dir_path =
+        dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
+    let safe_dir_path = home_dir_path.join(".local").join("bin");
+    std::fs::create_dir_all(safe_dir_path.clone())?;
+    Ok(safe_dir_path)
 }
