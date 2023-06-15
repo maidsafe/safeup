@@ -111,21 +111,21 @@ jobs:
       - name: Install binaries
         shell: pwsh
         run: |
-          cargo run -- client --version 0.74.2
-          cargo run -- node --version 0.80.3
-          cargo run -- testnet --version 0.1.4
+          cargo run -- client --version 0.77.27
+          cargo run -- node --version 0.83.25
+          cargo run -- testnet --version 0.1.29
       - name: Check if safe is available in new shell session
         shell: pwsh
         run: |
-          if (!(Test-Path "$env:USERPROFILE\.safe\cli\safe.exe")) {
+          if (!(Test-Path "$env:USERPROFILE\safe\safe.exe")) {
             Write-Host "safe.exe does not exist"
             exit 1
           }
-          if (!(Test-Path "$env:USERPROFILE\.safe\node\safenode.exe")) {
+          if (!(Test-Path "$env:USERPROFILE\safe\safenode.exe")) {
             Write-Host "safenode.exe does not exist"
             exit 1
           }
-          if (!(Test-Path "$env:USERPROFILE\.safe\node\testnet.exe")) {
+          if (!(Test-Path "$env:USERPROFILE\safe\testnet.exe")) {
             Write-Host "testnet.exe does not exist"
             exit 1
           }
@@ -134,33 +134,39 @@ jobs:
           # being modified easily, so we need to refer to the binaries with their full paths.
           # Other manual testing has proven that the changes to the Path environment variable do
           # take effect.
-          $output = & "${env:USERPROFILE}\.safe\cli\safe.exe" --version
+          $output = & "${env:USERPROFILE}\safe\safe.exe" --version
           $version = $output | Select-String -Pattern "sn_cli (\d+\.\d+\.\d+)"
           $versionNumber = $version.Matches.Groups[1].Value
-          if ($versionNumber -eq "0.74.2") {
+          if ($versionNumber -eq "0.77.27") {
             Write-Host "The correct version of safe has been installed"
           } else {
             Write-Host "The correct version of safe has not been installed"
+            Write-Host "We expected version 0.77.27"
+            Write-Host "The downloaded binary has $versionNumber"
             exit 1
           }
 
-          $output = & "${env:USERPROFILE}\.safe\node\safenode.exe" --version
-          $version = $output | Select-String -Pattern "sn_node (\d+\.\d+\.\d+)"
+          $output = & "${env:USERPROFILE}\safe\safenode.exe" --version
+          $version = $output | Select-String -Pattern "safenode cli (\d+\.\d+\.\d+)"
           $versionNumber = $version.Matches.Groups[1].Value
-          if ($versionNumber -eq "0.80.3") {
+          if ($versionNumber -eq "0.83.25") {
             Write-Host "The correct version of safenode has been installed"
           } else {
             Write-Host "The correct version of safenode has not been installed"
+            Write-Host "We expected version 0.83.25"
+            Write-Host "The downloaded binary has $versionNumber"
             exit 1
           }
 
-          $output = & "${env:USERPROFILE}\.safe\node\testnet.exe" --version
+          $output = & "${env:USERPROFILE}\safe\testnet.exe" --version
           $version = $output | Select-String -Pattern "testnet (\d+\.\d+\.\d+)"
           $versionNumber = $version.Matches.Groups[1].Value
-          if ($versionNumber -eq "0.1.4") {
+          if ($versionNumber -eq "0.1.29") {
             Write-Host "The correct version of testnet has been installed"
           } else {
             Write-Host "The correct version of testnet has not been installed"
+            Write-Host "We expected version 0.1.29"
+            Write-Host "The downloaded binary has $versionNumber"
             exit 1
           }
 
@@ -178,9 +184,9 @@ jobs:
       - name: Install binaries
         shell: bash
         run: |
-          cargo run -- client --version 0.74.2
-          cargo run -- node --version 0.80.3
-          cargo run -- testnet --version 0.1.4
+          cargo run -- client --version 0.77.27
+          cargo run -- node --version 0.83.25
+          cargo run -- testnet --version 0.1.29
       - name: Check if safe is available in new shell session
         shell: bash
         run: |
@@ -191,33 +197,39 @@ jobs:
           # the test does prove that the env file modifies PATH correctly and
           # that the installs of the binaries are available from their local
           # locations.
-          source ~/.safe/env
+          source ~/.config/safe/env
 
-          [[ -f "$HOME/.safe/cli/safe" ]] || { echo "safe not in expected location"; exit 1; }
-          [[ -f "$HOME/.safe/node/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
-          [[ -f "$HOME/.safe/node/testnet" ]] || { echo "testnet not in expected location"; exit 1; }
+          [[ -f "$HOME/.local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
+          [[ -f "$HOME/.local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
+          [[ -f "$HOME/.local/bin/testnet" ]] || { echo "testnet not in expected location"; exit 1; }
 
           version=$(safe --version | awk '{ print $2 }')
-          if [[ "$version" == "0.74.2" ]]; then
+          if [[ "$version" == "0.77.27" ]]; then
             echo "The correct version of safe has been installed"
           else
             echo "The correct version of safe has not been installed"
+            echo "We expected 0.77.27"
+            echo "The downloaded binary has $version"
             exit 1
           fi
 
-          version=$(safenode --version | awk '{ print $2 }')
-          if [[ "$version" == "0.80.3" ]]; then
+          version=$(safenode --version | awk '{ print $3 }')
+          if [[ "$version" == "0.83.25" ]]; then
             echo "The correct version of safenode has been installed"
           else
             echo "The correct version of safenode has not been installed"
+            echo "We expected 0.83.25"
+            echo "The downloaded binary has $version"
             exit 1
           fi
 
           version=$(testnet --version | awk '{ print $2 }')
-          if [[ "$version" == "0.1.4" ]]; then
+          if [[ "$version" == "0.1.29" ]]; then
             echo "The correct version of testnet has been installed"
           else
             echo "The correct version of testnet has not been installed"
+            echo "We expected 0.1.29"
+            echo "The downloaded binary has $version"
             exit 1
           fi
 
@@ -236,9 +248,9 @@ jobs:
         shell: bash
         run: |
           cargo build --release
-          sudo ./target/release/safeup client --version 0.74.2
-          sudo ./target/release/safeup node --version 0.80.3
-          sudo ./target/release/safeup testnet --version 0.1.4
+          sudo ./target/release/safeup client --version 0.77.27
+          sudo ./target/release/safeup node --version 0.83.25
+          sudo ./target/release/safeup testnet --version 0.1.29
 
           [[ -f "/usr/local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
           [[ -f "/usr/local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
@@ -247,26 +259,32 @@ jobs:
           # Due to installation at /usr/local/bin, the binaries should be
           # immediately available in the same shell session.
           version=$(safe --version | awk '{ print $2 }')
-          if [[ "$version" == "0.74.2" ]]; then
+          if [[ "$version" == "0.77.27" ]]; then
             echo "The correct version of safe has been installed"
           else
             echo "The correct version of safe has not been installed"
+            echo "We expected 0.77.27"
+            echo "The downloaded binary has $version"
             exit 1
           fi
 
-          version=$(safenode --version | awk '{ print $2 }')
-          if [[ "$version" == "0.80.3" ]]; then
+          version=$(safenode --version | awk '{ print $3 }')
+          if [[ "$version" == "0.83.25" ]]; then
             echo "The correct version of safenode has been installed"
           else
             echo "The correct version of safenode has not been installed"
+            echo "We expected 0.83.25"
+            echo "The downloaded binary has $version"
             exit 1
           fi
 
           version=$(testnet --version | awk '{ print $2 }')
-          if [[ "$version" == "0.1.4" ]]; then
+          if [[ "$version" == "0.1.29" ]]; then
             echo "The correct version of testnet has been installed"
           else
             echo "The correct version of testnet has not been installed"
+            echo "We expected 0.1.29"
+            echo "The downloaded binary has $version"
             exit 1
           fi
 
@@ -285,35 +303,41 @@ jobs:
       - name: Install binaries
         shell: zsh {0}
         run: |
-          cargo run -- client --version 0.74.2
-          cargo run -- node --version 0.80.3
-          cargo run -- testnet --version 0.1.4
+          cargo run -- client --version 0.77.27
+          cargo run -- node --version 0.83.25
+          cargo run -- testnet --version 0.1.29
 
           [[ -f "/usr/local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
           [[ -f "/usr/local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
           [[ -f "/usr/local/bin/testnet" ]] || { echo "testnet not in expected location"; exit 1; }
 
           version=$(safe --version | awk '{ print $2 }')
-          if [[ "$version" == "0.74.2" ]]; then
+          if [[ "$version" == "0.77.27" ]]; then
             echo "The correct version of safe has been installed"
           else
             echo "The correct version of safe has not been installed"
+            echo "We expected 0.77.27"
+            echo "The downloaded binary has $version"
             exit 1
           fi
 
-          version=$(safenode --version | awk '{ print $2 }')
-          if [[ "$version" == "0.80.3" ]]; then
+          version=$(safenode --version | awk '{ print $3 }')
+          if [[ "$version" == "0.83.25" ]]; then
             echo "The correct version of safenode has been installed"
           else
             echo "The correct version of safenode has not been installed"
+            echo "We expected 0.83.25"
+            echo "The downloaded binary has $version"
             exit 1
           fi
 
           version=$(testnet --version | awk '{ print $2 }')
-          if [[ "$version" == "0.1.4" ]]; then
+          if [[ "$version" == "0.1.29" ]]; then
             echo "The correct version of testnet has been installed"
           else
             echo "The correct version of testnet has not been installed"
+            echo "We expected 0.1.29"
+            echo "The downloaded binary has $version"
             exit 1
           fi
 
@@ -329,5 +353,5 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Cargo publish dry run
+      - name: dry run publish
         run: cargo publish --dry-run

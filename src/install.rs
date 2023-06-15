@@ -39,13 +39,10 @@ const VCPP_REDIST_URL: &str = "https://download.microsoft.com/download/9/3/F/93F
 const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
     #!/bin/sh
     case ":${PATH}:" in
-        *:"$HOME/.safe/cli":*)
-            ;;
-        *:"$HOME/.safe/node":*)
+        *:"$HOME/.local/bin":*)
             ;;
         *)
-            export PATH="$HOME/.safe/cli:$PATH"
-            export PATH="$HOME/.safe/node:$PATH"
+            export PATH="$HOME/.local/bin:$PATH"
             ;;
     esac
 "#};
