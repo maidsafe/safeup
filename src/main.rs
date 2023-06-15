@@ -36,7 +36,7 @@ struct Cli {
 enum Commands {
     /// Install the latest version of safe.
     ///
-    /// If running safeup as root, the default install path is /usr/local/bin; otherwise it will be
+    /// If running as root, the default install path is /usr/local/bin; otherwise it will be
     /// ~/.safe/cli.
     ///
     /// If running as the current user, the shell profile will be modified to put safe on PATH.
@@ -57,7 +57,7 @@ enum Commands {
     },
     /// Install the latest version of safenode.
     ///
-    /// If running safeup as root, the default install path is /usr/local/bin; otherwise it will be
+    /// If running as root, the default install path is /usr/local/bin; otherwise it will be
     /// ~/.safe/node.
     ///
     /// If running as the current user, the shell profile will be modified to put safenode on PATH.
@@ -78,7 +78,7 @@ enum Commands {
     },
     /// Install the latest version of testnet.
     ///
-    /// If running safeup as root, the default install path is /usr/local/bin; otherwise it will be
+    /// If running as root, the default install path is /usr/local/bin; otherwise it will be
     /// ~/.safe/node.
     ///
     /// If running as the current user, the shell profile will be modified to put testnet on PATH.
