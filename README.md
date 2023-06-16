@@ -24,7 +24,7 @@ This process will download and install `safeup` for your platform, then run it t
 
 On Windows, we are currently not supporting installing either `safeup` or the other binaries with Administrator privileges, so there is only one command:
 ```
-iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/jacderida/safeup/install-scripts/install.ps1'))
+iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/maidsafe/safeup/main/install.ps1'))
 ```
 
 On all platforms, the above processes will download and install `safeup` for your platform, then run it to have it install the `safe` client binary.
