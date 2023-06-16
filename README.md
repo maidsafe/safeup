@@ -24,12 +24,12 @@ The install script also accepts two flag arguments, namely `--client` and `--nod
 
 To use these options as `sudo`:
 ```
-curl -sSL https://raw.githubusercontent.com/jacderida/safeup/install-scripts/install.sh | sudo bash -s -- --client
+curl -sSL https://raw.githubusercontent.com/maidsafe/safeup/main/install.sh | sudo bash -s -- --client
 ```
 
 Otherwise:
 ```
-curl -sSL https://raw.githubusercontent.com/jacderida/safeup/install-scripts/install.sh | bash -s -- --client
+curl -sSL https://raw.githubusercontent.com/maidsafe/safeup/main/install.sh | bash -s -- --client
 ```
 
 ### Windows
