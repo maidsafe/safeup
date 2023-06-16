@@ -248,6 +248,7 @@ pub async fn configure_shell_profile(
             "To make safe available in this session run 'source {}'",
             path_config_file_path
         );
+        println!("Alternatively you can start a new session");
     }
 
     Ok(())
