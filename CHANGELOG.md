@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/maidsafe/safeup/compare/v0.2.0...v0.2.1) - 2023-06-16
+
+### Added
+- use banners for install process
+- provide powershell install script
+- provide unix-based install script
+
+### Other
+- provide installation instructions
+
 ## [0.2.0](https://github.com/maidsafe/safeup/compare/v0.1.2...v0.2.0) - 2023-06-16
 
 ### Added
