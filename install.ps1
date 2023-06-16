@@ -22,7 +22,5 @@ tar -xf $archivePath -C $destination
 Remove-Item $archivePath
 $safeupExePath = Join-Path $destination "safeup.exe"
 
-Write-Host "Now running safeup to install the safe client..."
-Start-Process -FilePath $safeupExePath -ArgumentList "client"
-Write-Host "If you wish to install safenode, please run 'safeup node'."
 Write-Host "You may need to start a new session for safeup to become available."
+Write-Host "When safeup is available, please run 'safeup --help' to see how to install network components."
