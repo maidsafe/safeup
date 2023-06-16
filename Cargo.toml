@@ -3,7 +3,7 @@ name = "safeup"
 authors = ["MaidSafe Developers <dev@maidsafe.net>"]
 description = "CLI for installing components for accessing the Safe Network"
 license = "GPL-3.0"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 
 [[bin]]
