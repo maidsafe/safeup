@@ -20,6 +20,18 @@ curl -sSL https://raw.githubusercontent.com/maidsafe/safeup/main/install.sh | ba
 
 This process will download and install `safeup` for your platform, then run it to have it install the `safe` client binary.
 
+The install script also accepts two flag arguments, namely `--client` and `--node`. If either are used, the script will invoke the installed `safeup` binary to install `safe` and `safenode`, respectively, without having to run either as an additional post-install step.
+
+To use these options as `sudo`:
+```
+curl -sSL https://raw.githubusercontent.com/jacderida/safeup/install-scripts/install.sh | sudo bash -s -- --client
+```
+
+Otherwise:
+```
+curl -sSL https://raw.githubusercontent.com/jacderida/safeup/install-scripts/install.sh | bash -s -- --client
+```
+
 ### Windows
 
 On Windows, we are currently not supporting installing either `safeup` or the other binaries with Administrator privileges, so there is only one command:
@@ -27,7 +39,9 @@ On Windows, we are currently not supporting installing either `safeup` or the ot
 iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/maidsafe/safeup/main/install.ps1'))
 ```
 
-On all platforms, the above processes will download and install `safeup` for your platform, then run it to have it install the `safe` client binary.
+The Powershell installer does not support the `--client` or `--node` arguments because it's not possible to pass them when the script is downloaded.
+
+Therefore, installing any components on Windows is an additional post-safeup-installation step.
 
 ## Usage
 

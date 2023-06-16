@@ -1,5 +1,31 @@
 #!/bin/bash
 
+install_client=0
+install_node=0
+
+while (( "$#" )); do
+  case "$1" in
+    --client)
+      install_client=1
+      shift
+      ;;
+    --node)
+      install_node=1
+      shift
+      ;;
+    *) 
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if [[ $EUID -eq 0 ]]; then
+  running_as_root=1
+else
+  running_as_root=0
+fi
+
 function print_banner() {
   echo "**************************************"
   echo "*                                    *"
@@ -44,11 +70,23 @@ function get_latest_version() {
 }
 
 function install_safeup() {
-  if [[ $EUID -eq 0 ]]; then
+  if [[ $running_as_root -eq 1 ]]; then
     target_dir="/usr/local/bin"
   else
     target_dir="$HOME/.local/bin"
     mkdir -p "$target_dir"
+    mkdir -p "$HOME/.config/safe"
+    cat << 'EOF' > ~/.config/safe/env
+#!/bin/sh
+case ":${PATH}:" in
+    *:"$HOME/.local/bin":*)
+        ;;
+    *)
+        export PATH="$HOME/.local/bin:$PATH"
+        ;;
+esac
+EOF
+  echo "source $HOME/.config/safe/env" >> "$HOME/.bashrc"
   fi
 
   temp_dir=$(mktemp -d)
@@ -61,12 +99,21 @@ function install_safeup() {
 }
 
 function post_install() {
-  echo "Now running safeup to install the safe client..."
-  $target_dir/safeup client
-  if [[ $EUID -eq 0 ]]; then
-    echo "If you wish to install safenode, please run 'sudo safeup node'."
+  if [[ $install_client -eq 1 ]]; then
+    echo "Now running safeup to install the safe client..."
+    $target_dir/safeup client
+  fi
+  if [[ $install_node -eq 1 ]]; then
+    echo "Now running safeup to install safenode..."
+    $target_dir/safeup node
+  fi
+  if [[ $running_as_root -eq 1 ]]; then
+    echo "Please run 'safeup --help' to see how to install network components."
   else
-    echo "If you wish to install safenode, please run 'safeup node'."
+    printf "\n"
+    echo "The safeup binary has been installed, but it's not available in this session."
+    echo "You must either run 'source ~/.config/safe/env' in this session, or start a new session."
+    echo "When safeup is available, please run 'safeup --help' to see how to install network components."
   fi
 }
 
