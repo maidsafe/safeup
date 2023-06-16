@@ -12,6 +12,30 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
+  # The code in this crate uses lots of conditional compilation for cross-platform capabilities.
+  # Therefore, it's important we make sure it can build on both the Windows and Unix OS families.
+  build:
+    name: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        id: toolchain
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - shell: bash
+        run: cargo build --all-targets --all-features
   checks:
     if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
     name: Clippy & fmt
