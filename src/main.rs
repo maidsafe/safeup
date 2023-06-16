@@ -108,6 +108,11 @@ async fn main() -> Result<()> {
             no_modify_shell_profile,
             version,
         }) => {
+            println!("**************************************");
+            println!("*                                    *");
+            println!("*          Installing safe           *");
+            println!("*                                    *");
+            println!("**************************************");
             install::check_prerequisites()?;
             install(
                 AssetType::Client,
@@ -123,6 +128,11 @@ async fn main() -> Result<()> {
             no_modify_shell_profile,
             version,
         }) => {
+            println!("**************************************");
+            println!("*                                    *");
+            println!("*          Installing safenode       *");
+            println!("*                                    *");
+            println!("**************************************");
             install::check_prerequisites()?;
             install(
                 AssetType::Node,
@@ -138,6 +148,11 @@ async fn main() -> Result<()> {
             no_modify_shell_profile,
             version,
         }) => {
+            println!("**************************************");
+            println!("*                                    *");
+            println!("*          Installing testnet        *");
+            println!("*                                    *");
+            println!("**************************************");
             install::check_prerequisites()?;
             install(
                 AssetType::Testnet,
@@ -148,10 +163,7 @@ async fn main() -> Result<()> {
             )
             .await
         }
-        None => {
-            println!("interactive gui");
-            Ok(())
-        }
+        None => Ok(()),
     }
 }
 
