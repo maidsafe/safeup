@@ -63,7 +63,11 @@ function install_safeup() {
 function post_install() {
   echo "Now running safeup to install the safe client..."
   $target_dir/safeup client
-  echo "If you wish to install safenode, please run 'safeup node'."
+  if [[ $EUID -eq 0 ]]; then
+    echo "If you wish to install safenode, please run 'sudo safeup node'."
+  else
+    echo "If you wish to install safenode, please run 'safeup node'."
+  fi
 }
 
 print_banner
