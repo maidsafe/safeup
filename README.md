@@ -36,7 +36,7 @@ curl -sSL https://raw.githubusercontent.com/maidsafe/safeup/main/install.sh | ba
 
 On Windows, we are currently not supporting installing either `safeup` or the other binaries with Administrator privileges, so there is only one command:
 ```
-iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/maidsafe/safeup/main/install.ps1'))
+iex (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/maidsafe/safeup/main/install.ps1")
 ```
 
 The Powershell installer does not support the `--client` or `--node` arguments because it's not possible to pass them when the script is downloaded.
