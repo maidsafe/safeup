@@ -1,3 +1,5 @@
+$ErrorActionPreference = "Stop"
+
 Write-Host "**************************************"
 Write-Host "*                                    *"
 Write-Host "*         Installing safeup          *"
@@ -10,18 +12,19 @@ $response = Invoke-WebRequest `
 $json = $response | ConvertFrom-Json
 $version = $json.tag_name.TrimStart('v')
 Write-Host "Latest version of safeup is $version"
-$asset = $json.assets | Where-Object { $_.name -match "safeup-$version-x86_64-pc-windows-msvc.tar.gz" }
+$asset = $json.assets | Where-Object { $_.name -match "safeup-$version-x86_64-pc-windows-msvc.zip" }
 $downloadUrl = $asset.browser_download_url
 
-$archivePath = Join-Path $env:TEMP "safeup.tar.gz"
+$archivePath = Join-Path $env:TEMP "safeup.zip"
 Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
 
 $safePath = Join-Path $env:USERPROFILE "safe"
 New-Item -ItemType Directory -Force -Path $safePath
-tar -xf $archivePath -C $safePath
+Expand-Archive -Path $archivePath -DestinationPath $safePath
 Remove-Item $archivePath
 $safeupExePath = Join-Path $safePath "safeup.exe"
 
+$currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::User)
 if ($currentPath -notlike "*$safePath*") {
     $newPath = $currentPath + ";" + $safePath
     [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::User)
