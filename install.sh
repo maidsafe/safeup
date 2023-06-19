@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 install_client=0
 install_node=0
 
