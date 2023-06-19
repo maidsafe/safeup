@@ -54,6 +54,14 @@ function detect_arch() {
       fi
       ;;
     aarch64*) arch_triple="aarch64-unknown-$os-musl" ;;
+    arm64*)
+      if [[ $os == "mac" ]]; then
+        echo "Mac arm64 architecture not supported, installing x86_64 version"
+        arch_triple="x86_64-apple-darwin"
+      else
+        arch_triple="aarch64-unknown-$os-musl"
+      fi
+      ;;
     *) echo "Architecture $arch not supported"; exit 1 ;;
   esac
   echo "Will retrieve safeup for $arch_triple architecture"
