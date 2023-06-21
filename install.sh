@@ -64,6 +64,7 @@ function detect_arch() {
         arch_triple="aarch64-unknown-$os-musl"
       fi
       ;;
+    armv7*) arch_triple="armv7-unknown-$os-musleabihf" ;;
     *) echo "Architecture $arch not supported"; exit 1 ;;
   esac
   echo "Will retrieve safeup for $arch_triple architecture"
