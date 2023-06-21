@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5](https://github.com/maidsafe/safeup/compare/v0.3.4...v0.3.5) - 2023-06-21
+
+### Added
+- support armv7 architecture
+
+### Fixed
+- use `-Force` option on zip extraction
+
 ## [0.3.4](https://github.com/maidsafe/safeup/compare/v0.3.3...v0.3.4) - 2023-06-19
 
 ### Other
