@@ -20,7 +20,7 @@ Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
 
 $safePath = Join-Path $env:USERPROFILE "safe"
 New-Item -ItemType Directory -Force -Path $safePath
-Expand-Archive -Path $archivePath -DestinationPath $safePath
+Expand-Archive -Path $archivePath -DestinationPath $safePath -Force
 Remove-Item $archivePath
 $safeupExePath = Join-Path $safePath "safeup.exe"
 
