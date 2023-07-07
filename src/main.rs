@@ -240,9 +240,9 @@ fn get_platform() -> Result<String> {
         }
         "macos" => {
             if ARCH != "x86_64" {
-                return Err(eyre!(
-                    "We currently only have x86_64 binaries available for macOS"
-                ));
+                println!(
+                    "We currently only have x86_64 binaries available for macOS. On Mx Macs, Rosetta will run these x86_64 binaries."
+                );
             }
             Ok(format!("{}-apple-darwin", ARCH))
         }
