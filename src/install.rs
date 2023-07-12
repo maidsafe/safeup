@@ -54,21 +54,30 @@ pub enum AssetType {
     Testnet,
 }
 
+impl AssetType {
+    pub fn variants() -> Vec<AssetType> {
+        vec![AssetType::Client, AssetType::Node, AssetType::Testnet]
+    }
+}
+
 impl std::fmt::Display for AssetType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            AssetType::Client => write!(f, "Client"),
-            AssetType::Node => write!(f, "Node"),
-            AssetType::Testnet => write!(f, "Testnet"),
+            AssetType::Client => write!(f, "safe"),
+            AssetType::Node => write!(f, "safenode"),
+            AssetType::Testnet => write!(f, "testnet"),
         }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
     pub safe_path: PathBuf,
+    pub safe_version: String,
     pub safenode_path: PathBuf,
+    pub safenode_version: String,
     pub testnet_path: PathBuf,
+    pub testnet_version: String,
 }
 
 impl Settings {
@@ -78,17 +87,47 @@ impl Settings {
             file.read_to_string(&mut contents)?;
             serde_json::from_str(&contents).unwrap_or_else(|_| Settings {
                 safe_path: PathBuf::new(),
+                safe_version: String::new(),
                 safenode_path: PathBuf::new(),
+                safenode_version: String::new(),
                 testnet_path: PathBuf::new(),
+                testnet_version: String::new(),
             })
         } else {
             Settings {
                 safe_path: PathBuf::new(),
+                safe_version: String::new(),
                 safenode_path: PathBuf::new(),
+                safenode_version: String::new(),
                 testnet_path: PathBuf::new(),
+                testnet_version: String::new(),
             }
         };
         Ok(settings)
+    }
+
+    pub fn get_installed_version(&self, asset_type: &AssetType) -> String {
+        match asset_type {
+            AssetType::Client => self.safe_version.clone(),
+            AssetType::Node => self.safenode_version.clone(),
+            AssetType::Testnet => self.testnet_version.clone(),
+        }
+    }
+
+    pub fn is_installed(&self, asset_type: &AssetType) -> bool {
+        match asset_type {
+            AssetType::Client => !self.safe_version.is_empty(),
+            AssetType::Node => !self.safenode_version.is_empty(),
+            AssetType::Testnet => !self.testnet_version.is_empty(),
+        }
+    }
+
+    pub fn get_install_path(&self, asset_type: &AssetType) -> PathBuf {
+        match asset_type {
+            AssetType::Client => self.safe_path.clone(),
+            AssetType::Node => self.safenode_path.clone(),
+            AssetType::Testnet => self.testnet_path.clone(),
+        }
     }
 
     pub fn save(&self, settings_file_path: &PathBuf) -> Result<()> {
@@ -172,6 +211,7 @@ pub async fn install_bin(
             .to_str()
             .ok_or_else(|| eyre!("Could not obtain path for shell profile"))?
     );
+    println!("dest_dir_path = {:#?}", dest_dir_path);
     std::fs::create_dir_all(&dest_dir_path)?;
 
     let (asset_name, version) = if let Some(version) = version {
@@ -179,11 +219,13 @@ pub async fn install_bin(
             release_repository.get_versioned_asset_name(&asset_type, platform, &version);
         (asset_name, version)
     } else {
+        println!("Retrieving latest version for {asset_type}...");
         release_repository
-            .get_latest_asset_name(asset_type, platform)
+            .get_latest_asset_name(&asset_type, platform)
             .await?
     };
 
+    println!("Installing {asset_type} version {version}...");
     let archive_path = dest_dir_path.join(&asset_name);
     asset_repository
         .download_asset(&asset_name, &archive_path)
@@ -647,8 +689,11 @@ mod test {
 
         let settings = Settings {
             safe_path: safe_bin_file.to_path_buf(),
+            safe_version: "v0.75.1".to_string(),
             safenode_path: safenode_bin_file.to_path_buf(),
+            safenode_version: "v0.75.2".to_string(),
             testnet_path: testnet_bin_file.to_path_buf(),
+            testnet_version: "v0.75.3".to_string(),
         };
 
         settings.save(&settings_file.to_path_buf())?;
@@ -656,8 +701,11 @@ mod test {
         settings_file.assert(predicates::path::is_file());
         let settings = Settings::read(&settings_file.to_path_buf())?;
         assert_eq!(settings.safe_path, safe_bin_file.to_path_buf());
+        assert_eq!(settings.safe_version, "v0.75.1");
         assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
+        assert_eq!(settings.safenode_version, "v0.75.2");
         assert_eq!(settings.testnet_path, testnet_bin_file.to_path_buf());
+        assert_eq!(settings.testnet_version, "v0.75.3");
         Ok(())
     }
 
@@ -679,8 +727,11 @@ mod test {
 
         let settings = Settings {
             safe_path: safe_bin_file.to_path_buf(),
+            safe_version: "v0.75.1".to_string(),
             safenode_path: safenode_bin_file.to_path_buf(),
+            safenode_version: "v0.75.2".to_string(),
             testnet_path: testnet_bin_file.to_path_buf(),
+            testnet_version: "v0.75.3".to_string(),
         };
 
         settings.save(&settings_file.to_path_buf())?;
@@ -688,8 +739,11 @@ mod test {
         settings_file.assert(predicates::path::is_file());
         let settings = Settings::read(&settings_file.to_path_buf())?;
         assert_eq!(settings.safe_path, safe_bin_file.to_path_buf());
+        assert_eq!(settings.safe_version, "v0.75.1");
         assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
+        assert_eq!(settings.safenode_version, "v0.75.2");
         assert_eq!(settings.testnet_path, testnet_bin_file.to_path_buf());
+        assert_eq!(settings.testnet_version, "v0.75.3");
         Ok(())
     }
 
@@ -700,9 +754,15 @@ mod test {
         settings_file.write_str(
             r#"
         {
-          "safe_path": "/usr/local/bin/safe",
-          "safenode_path": "/usr/local/bin/safenode",
-          "testnet_path": "/usr/local/bin/testnet"
+          "safe_path": "/home/chris/.local/safe",
+          "safe_version": "v0.75.1",
+          "safe_is_elevated_install": false,
+          "safenode_path": "/home/chris/.local/bin/safenode",
+          "safenode_version": "v0.75.2",
+          "safenode_is_elevated_install": false,
+          "testnet_path": "/home/chris/.local/bin/testnet",
+          "testnet_version": "v0.75.3",
+          "testnet_is_elevated_install": false
         }
         "#,
         )?;
@@ -717,12 +777,15 @@ mod test {
 
         settings_file.assert(predicates::path::is_file());
         let settings = Settings::read(&settings_file.to_path_buf())?;
-        assert_eq!(settings.safe_path, PathBuf::from("/usr/local/bin/safe"));
+        assert_eq!(settings.safe_path, PathBuf::from("/home/chris/.local/safe"));
+        assert_eq!(settings.safe_version, "v0.75.1");
         assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
+        assert_eq!(settings.safenode_version, "v0.75.2");
         assert_eq!(
             settings.testnet_path,
-            PathBuf::from("/usr/local/bin/testnet")
+            PathBuf::from("/home/chris/.local/bin/testnet")
         );
+        assert_eq!(settings.testnet_version, "v0.75.3");
         Ok(())
     }
 }
