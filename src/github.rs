@@ -57,7 +57,7 @@ impl GithubReleaseRepository {
     /// response body.
     pub async fn get_latest_asset_name(
         &self,
-        asset_type: AssetType,
+        asset_type: &AssetType,
         platform: &str,
     ) -> Result<(String, String)> {
         let mut page = 1;
@@ -225,7 +225,7 @@ mod test {
         let repository =
             GithubReleaseRepository::new(&server.base_url(), "maidsafe", "safe_network");
         let (asset_name, version) = repository
-            .get_latest_asset_name(AssetType::Client, "x86_64-unknown-linux-musl")
+            .get_latest_asset_name(&AssetType::Client, "x86_64-unknown-linux-musl")
             .await?;
 
         releases_list_mock.assert();
@@ -264,7 +264,7 @@ mod test {
         let repository =
             GithubReleaseRepository::new(&server.base_url(), "maidsafe", "safe_network");
         let result = repository
-            .get_latest_asset_name(AssetType::Client, "x86_64-unknown-linux-musl")
+            .get_latest_asset_name(&AssetType::Client, "x86_64-unknown-linux-musl")
             .await;
 
         releases_list_mock.assert();
@@ -310,7 +310,7 @@ mod test {
         let repository =
             GithubReleaseRepository::new(&server.base_url(), "maidsafe", "safe_network");
         let (asset_name, version) = repository
-            .get_latest_asset_name(AssetType::Node, "x86_64-unknown-linux-musl")
+            .get_latest_asset_name(&AssetType::Node, "x86_64-unknown-linux-musl")
             .await?;
 
         releases_list_mock.assert();
@@ -352,7 +352,7 @@ mod test {
         let repository =
             GithubReleaseRepository::new(&server.base_url(), "maidsafe", "safe_network");
         let result = repository
-            .get_latest_asset_name(AssetType::Node, "x86_64-unknown-linux-musl")
+            .get_latest_asset_name(&AssetType::Node, "x86_64-unknown-linux-musl")
             .await;
 
         releases_list_mock.assert();
@@ -398,7 +398,7 @@ mod test {
         let repository =
             GithubReleaseRepository::new(&server.base_url(), "maidsafe", "safe_network");
         let (asset_name, version) = repository
-            .get_latest_asset_name(AssetType::Testnet, "x86_64-unknown-linux-musl")
+            .get_latest_asset_name(&AssetType::Testnet, "x86_64-unknown-linux-musl")
             .await?;
 
         releases_list_mock.assert();
@@ -440,7 +440,7 @@ mod test {
         let repository =
             GithubReleaseRepository::new(&server.base_url(), "maidsafe", "safe_network");
         let result = repository
-            .get_latest_asset_name(AssetType::Testnet, "x86_64-unknown-linux-musl")
+            .get_latest_asset_name(&AssetType::Testnet, "x86_64-unknown-linux-musl")
             .await;
 
         releases_list_mock.assert();
