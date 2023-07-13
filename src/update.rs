@@ -31,20 +31,18 @@ pub fn perform_update_assessment(
         return Ok(UpdateAssessmentResult::NoPreviousInstallation);
     }
     match compare_versions(latest_version, &settings.get_installed_version(asset_type))? {
-        Ordering::Equal => return Ok(UpdateAssessmentResult::AtLatestVersion),
-        Ordering::Less => {
-            return Err(eyre!(
-                "The latest version is less than the current version of your binary."
-            )
-            .suggestion("You may want to remove your safeup.conf and install safeup again."))
-        }
-        Ordering::Greater => return Ok(UpdateAssessmentResult::PerformUpdate),
-    };
+        Ordering::Equal => Ok(UpdateAssessmentResult::AtLatestVersion),
+        Ordering::Less => Err(eyre!(
+            "The latest version is less than the current version of your binary."
+        )
+        .suggestion("You may want to remove your safeup.conf and install safeup again.")),
+        Ordering::Greater => Ok(UpdateAssessmentResult::PerformUpdate),
+    }
 }
 
 fn compare_versions(version_a: &str, version_b: &str) -> Result<Ordering> {
-    let v1 = Version::parse(version_a.strip_prefix("v").unwrap_or(version_a))?;
-    let v2 = Version::parse(version_b.strip_prefix("v").unwrap_or(version_b))?;
+    let v1 = Version::parse(version_a.strip_prefix('v').unwrap_or(version_a))?;
+    let v2 = Version::parse(version_b.strip_prefix('v').unwrap_or(version_b))?;
     Ok(v1.cmp(&v2))
 }
 
@@ -104,14 +102,13 @@ mod test {
             testnet_version: "v0.3.4".to_string(),
         };
 
-        let decision =
-            perform_update_assessment(&AssetType::Client, "v0.78.26", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Client, "v0.78.26", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
 
-        let decision = perform_update_assessment(&AssetType::Node, "v0.83.13", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Node, "v0.83.13", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
 
-        let decision = perform_update_assessment(&AssetType::Testnet, "v0.3.4", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Testnet, "v0.3.4", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
 
         Ok(())
@@ -129,7 +126,7 @@ mod test {
             testnet_version: "v0.3.4".to_string(),
         };
 
-        let result = perform_update_assessment(&AssetType::Client, "v0.76.0", &settings.clone());
+        let result = perform_update_assessment(&AssetType::Client, "v0.76.0", &settings);
         match result {
             Ok(_) => return Err(eyre!("this test should return an error")),
             Err(e) => assert_eq!(
@@ -138,7 +135,7 @@ mod test {
             ),
         }
 
-        let result = perform_update_assessment(&AssetType::Node, "v0.82.0", &settings.clone());
+        let result = perform_update_assessment(&AssetType::Node, "v0.82.0", &settings);
         match result {
             Ok(_) => return Err(eyre!("this test should return an error")),
             Err(e) => assert_eq!(
@@ -147,7 +144,7 @@ mod test {
             ),
         }
 
-        let result = perform_update_assessment(&AssetType::Node, "v0.2.0", &settings.clone());
+        let result = perform_update_assessment(&AssetType::Node, "v0.2.0", &settings);
         match result {
             Ok(_) => return Err(eyre!("this test should return an error")),
             Err(e) => assert_eq!(
@@ -170,14 +167,13 @@ mod test {
             testnet_version: "v0.3.4".to_string(),
         };
 
-        let decision =
-            perform_update_assessment(&AssetType::Client, "v0.78.27", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Client, "v0.78.27", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
-        let decision = perform_update_assessment(&AssetType::Node, "v0.83.14", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Node, "v0.83.14", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
-        let decision = perform_update_assessment(&AssetType::Testnet, "v0.3.5", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Testnet, "v0.3.5", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         Ok(())
@@ -195,13 +191,13 @@ mod test {
             testnet_version: "v0.3.4".to_string(),
         };
 
-        let decision = perform_update_assessment(&AssetType::Client, "v0.79.0", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Client, "v0.79.0", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
-        let decision = perform_update_assessment(&AssetType::Node, "v0.84.0", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Node, "v0.84.0", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
-        let decision = perform_update_assessment(&AssetType::Testnet, "v0.4.0", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Testnet, "v0.4.0", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         Ok(())
@@ -219,13 +215,13 @@ mod test {
             testnet_version: "v0.3.4".to_string(),
         };
 
-        let decision = perform_update_assessment(&AssetType::Client, "v1.0.0", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Client, "v1.0.0", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
-        let decision = perform_update_assessment(&AssetType::Node, "v1.0.0", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Node, "v1.0.0", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
-        let decision = perform_update_assessment(&AssetType::Testnet, "v1.0.0", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Testnet, "v1.0.0", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         Ok(())
@@ -242,7 +238,7 @@ mod test {
             testnet_version: "0.3.4".to_string(),
         };
 
-        let decision = perform_update_assessment(&AssetType::Client, "0.78.27", &settings.clone())?;
+        let decision = perform_update_assessment(&AssetType::Client, "0.78.27", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         Ok(())
