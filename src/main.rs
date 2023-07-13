@@ -60,10 +60,13 @@ struct Cli {
 enum Commands {
     /// Install the safe client binary.
     ///
-    /// If running without elevated privileges, safe will be installed to $HOME/.local/bin, and
-    /// the shell profile will be modified to put this location on PATH.
+    /// The location is platform specific:
+    /// - Linux/macOS: $HOME/.local/bin
+    /// - Windows: C:\Users\<username>\safe
     ///
-    /// Otherwise safe will be installed to /usr/local/bin.
+    /// On Linux/macOS, the Bash shell profile will be modified to add $HOME/.local/bin to the PATH
+    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\safe.
+    #[clap(verbatim_doc_comment)]
     Client {
         /// Override the default installation path.
         ///
@@ -81,10 +84,13 @@ enum Commands {
     },
     /// Install the safenode binary.
     ///
-    /// If running without elevated privileges, safenode will be installed to $HOME/.local/bin, and
-    /// your shell profile will be modified to put this location on PATH.
+    /// The location is platform specific:
+    /// - Linux/macOS: $HOME/.local/bin
+    /// - Windows: C:\Users\<username>\safe
     ///
-    /// Otherwise safenode will be installed to /usr/local/bin.
+    /// On Linux/macOS, the Bash shell profile will be modified to add $HOME/.local/bin to the PATH
+    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\safe.
+    #[clap(verbatim_doc_comment)]
     Node {
         /// Override the default installation path.
         ///
@@ -102,10 +108,13 @@ enum Commands {
     },
     /// Install the testnet binary.
     ///
-    /// If running without elevated privileges, testnet will be installed to $HOME/.local/bin, and
-    /// your shell profile will be modified to put this location on PATH.
+    /// The location is platform specific:
+    /// - Linux/macOS: $HOME/.local/bin
+    /// - Windows: C:\Users\<username>\safe
     ///
-    /// Otherwise testnet will be installed to /usr/local/bin.
+    /// On Linux/macOS, the Bash shell profile will be modified to add $HOME/.local/bin to the PATH
+    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\safe.
+    #[clap(verbatim_doc_comment)]
     Testnet {
         /// Override the default installation path.
         ///
@@ -186,19 +195,16 @@ async fn process_install_cmd(
     version: Option<String>,
     no_modify_shell_profile: bool,
 ) -> Result<()> {
-    let running_elevated = is_running_elevated();
     let safe_config_dir_path = get_safe_config_dir_path()?;
     let dest_dir_path = if let Some(path) = custom_path {
         path
-    } else if running_elevated {
-        std::path::PathBuf::from("/usr/local/bin")
     } else {
-        get_non_elevated_default_install_path()?
+        get_default_install_path()?
     };
 
     do_install_binary(&asset_type, dest_dir_path.clone(), version).await?;
 
-    if !running_elevated && !no_modify_shell_profile {
+    if !no_modify_shell_profile {
         install::configure_shell_profile(
             &dest_dir_path.clone(),
             &get_shell_profile_path()?,
@@ -266,7 +272,7 @@ async fn do_install_binary(
     version: Option<String>,
 ) -> Result<()> {
     let platform = get_platform()?;
-    let asset_repository = S3AssetRepository::new(ASSET_TYPE_BUCKET_MAP[&asset_type]);
+    let asset_repository = S3AssetRepository::new(ASSET_TYPE_BUCKET_MAP[asset_type]);
     let release_repository = GithubReleaseRepository::new(GITHUB_API_URL, ORG_NAME, REPO_NAME);
     let (installed_version, bin_path) = install::install_bin(
         asset_type.clone(),
@@ -332,23 +338,6 @@ fn get_platform() -> Result<String> {
 }
 
 #[cfg(target_os = "linux")]
-fn is_running_elevated() -> bool {
-    users::get_effective_uid() == 0
-}
-
-#[cfg(target_os = "macos")]
-fn is_running_elevated() -> bool {
-    let uid = users::get_effective_uid();
-    let sudo_uid = users::get_current_uid();
-    uid == sudo_uid
-}
-
-#[cfg(target_os = "windows")]
-fn is_running_elevated() -> bool {
-    false
-}
-
-#[cfg(target_os = "linux")]
 fn get_shell_profile_path() -> Result<PathBuf> {
     let home_dir_path =
         dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
@@ -364,11 +353,21 @@ fn get_shell_profile_path() -> Result<PathBuf> {
     Ok(home_dir_path.to_path_buf())
 }
 
+/// On macOS, it's not necessarily the case that ZSH will be the default shell.
+/// On GHA they are running Bash.
 #[cfg(target_os = "macos")]
 fn get_shell_profile_path() -> Result<PathBuf> {
+    let profile_file_name = match std::env::var("SHELL") {
+        Ok(shell) => match shell.as_str() {
+            "/bin/bash" => ".bashrc",
+            "/bin/zsh" => ".zshrc",
+            _ => return Err(eyre!("shell {shell} is not supported by safeup")),
+        },
+        Err(e) => return Err(eyre!(e)),
+    };
     let home_dir_path =
         dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
-    Ok(home_dir_path.join(".zshrc"))
+    Ok(home_dir_path.join(profile_file_name))
 }
 
 fn get_safe_config_dir_path() -> Result<PathBuf> {
@@ -380,7 +379,7 @@ fn get_safe_config_dir_path() -> Result<PathBuf> {
 }
 
 #[cfg(target_os = "windows")]
-fn get_non_elevated_default_install_path() -> Result<PathBuf> {
+fn get_default_install_path() -> Result<PathBuf> {
     let home_dir_path =
         dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
     let safe_dir_path = home_dir_path.join("safe");
@@ -389,7 +388,7 @@ fn get_non_elevated_default_install_path() -> Result<PathBuf> {
 }
 
 #[cfg(target_family = "unix")]
-fn get_non_elevated_default_install_path() -> Result<PathBuf> {
+fn get_default_install_path() -> Result<PathBuf> {
     let home_dir_path =
         dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
     let safe_dir_path = home_dir_path.join(".local").join("bin");

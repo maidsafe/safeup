@@ -211,7 +211,6 @@ pub async fn install_bin(
             .to_str()
             .ok_or_else(|| eyre!("Could not obtain path for shell profile"))?
     );
-    println!("dest_dir_path = {:#?}", dest_dir_path);
     std::fs::create_dir_all(&dest_dir_path)?;
 
     let (asset_name, version) = if let Some(version) = version {

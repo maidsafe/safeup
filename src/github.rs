@@ -64,7 +64,7 @@ impl GithubReleaseRepository {
         let per_page = 100;
         let mut latest_release: Option<(String, DateTime<Utc>)> = None;
         let target_tag_name = *ASSET_TYPE_CRATE_NAME_MAP
-            .get(&asset_type)
+            .get(asset_type)
             .ok_or_else(|| eyre!("Could not obtain asset name"))?;
 
         loop {
@@ -105,7 +105,7 @@ impl GithubReleaseRepository {
             .0;
         let version = self.get_version_from_tag_name(&tag_name)?;
         let release = self.get_release(&tag_name).await?;
-        let asset_name = self.get_versioned_asset_name(&asset_type, platform, &version);
+        let asset_name = self.get_versioned_asset_name(asset_type, platform, &version);
         if self.release_has_asset(&release, &asset_name)? {
             return Ok((asset_name, version));
         }
