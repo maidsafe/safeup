@@ -15,10 +15,6 @@ pub enum UpdateAssessmentResult {
 ///
 /// The process is:
 /// * If we have no previous installation of a component, no upgrade will be performed.
-/// * If the elevation levels are different, e.g., if the previous install ran as root, but the
-///   user now invoked safeup without root, don't perform an upgrade, as we will end up with
-///   two different binaries on the system.
-/// * If we are at the latest version, don't perform an upgrade.
 /// * If the latest version number is less than the current version number, something is wrong
 ///   there, so we return an error and the caller can advise the user to consider reinstalling.
 /// * Otherwise, if there is a newer version available, we'll perform the upgrade.
