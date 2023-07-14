@@ -20,6 +20,7 @@ use color_eyre::{eyre::eyre, Result};
 use github::GithubReleaseRepository;
 use install::{AssetType, Settings};
 use lazy_static::lazy_static;
+use prettytable::{Cell, Row, Table};
 use s3::S3AssetRepository;
 use std::collections::HashMap;
 use std::env::consts::{ARCH, OS};
@@ -29,6 +30,7 @@ use update::{perform_update_assessment, UpdateAssessmentResult};
 const GITHUB_API_URL: &str = "https://api.github.com";
 const ORG_NAME: &str = "maidsafe";
 const REPO_NAME: &str = "safe_network";
+const WRAP_LENGTH: usize = 80;
 
 lazy_static! {
     static ref ASSET_TYPE_BUCKET_MAP: HashMap<AssetType, &'static str> = {
@@ -131,7 +133,11 @@ enum Commands {
         version: Option<String>,
     },
     /// Update installed components.
+    #[clap(verbatim_doc_comment)]
     Update {},
+    /// List installed components.
+    #[clap(name = "ls", verbatim_doc_comment)]
+    List {},
 }
 
 #[tokio::main]
@@ -185,6 +191,7 @@ async fn main() -> Result<()> {
             println!("**************************************");
             process_update_cmd().await
         }
+        Some(Commands::List {}) => process_ls_command(),
         None => Ok(()),
     }
 }
@@ -263,6 +270,35 @@ async fn process_update_cmd() -> Result<()> {
         }
         println!();
     }
+    Ok(())
+}
+
+fn process_ls_command() -> Result<()> {
+    let safe_config_dir_path = get_safe_config_dir_path()?;
+    let settings_file_path = safe_config_dir_path.join("safeup.json");
+    let settings = Settings::read(&settings_file_path)?;
+    let mut table = Table::new();
+    table.add_row(Row::new(vec![
+        Cell::new("Name"),
+        Cell::new("Version"),
+        Cell::new("Path"),
+    ]));
+    for asset_type in AssetType::variants() {
+        let installed_path = settings.get_install_path(&asset_type);
+        let wrapped_install_path = textwrap::wrap(
+            &installed_path
+                .to_str()
+                .ok_or_else(|| eyre!("could not obtain install path"))?,
+            WRAP_LENGTH,
+        )
+        .join("\n");
+        table.add_row(Row::new(vec![
+            Cell::new(&asset_type.to_string()),
+            Cell::new(&settings.get_installed_version(&asset_type)),
+            Cell::new(&wrapped_install_path),
+        ]));
+    }
+    table.printstd();
     Ok(())
 }
 
