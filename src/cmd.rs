@@ -239,11 +239,19 @@ fn get_shell_profile_path() -> Result<PathBuf> {
 #[cfg(target_os = "macos")]
 fn get_shell_profile_path() -> Result<PathBuf> {
     let profile_file_name = match std::env::var("SHELL") {
-        Ok(shell) => match shell.as_str() {
-            "/bin/bash" => ".bashrc",
-            "/bin/zsh" => ".zshrc",
-            _ => return Err(eyre!("shell {shell} is not supported by safeup")),
-        },
+        Ok(shell) => {
+            let pb = PathBuf::from(shell.clone());
+            let shell_bin_name = pb
+                .file_stem()
+                .ok_or_else(|| eyre!(format!("Unable to obtain file stem from {shell}")))?
+                .to_string_lossy()
+                .to_string();
+            match shell_bin_name.as_str() {
+                "bash" => ".bashrc",
+                "zsh" => ".zshrc",
+                _ => return Err(eyre!("shell {shell} is not supported by safeup")),
+            }
+        }
         Err(e) => return Err(eyre!(e)),
     };
     let home_dir_path =
