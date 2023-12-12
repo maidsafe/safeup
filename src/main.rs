@@ -11,9 +11,7 @@
 extern crate assert_matches;
 
 mod cmd;
-mod github;
 mod install;
-mod s3;
 mod update;
 
 use clap::{Parser, Subcommand};

@@ -6,20 +6,16 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::github::GithubReleaseRepository;
 use crate::install::{AssetType, Settings};
-use crate::s3::S3AssetRepository;
 use crate::update::{perform_update_assessment, UpdateAssessmentResult};
 use color_eyre::{eyre::eyre, Result};
 use lazy_static::lazy_static;
 use prettytable::{Cell, Row, Table};
+use sn_releases::SafeReleaseRepositoryInterface;
 use std::collections::HashMap;
 use std::env::consts::{ARCH, OS};
 use std::path::PathBuf;
 
-const GITHUB_API_URL: &str = "https://api.github.com";
-const ORG_NAME: &str = "maidsafe";
-const REPO_NAME: &str = "safe_network";
 const WRAP_LENGTH: usize = 80;
 
 lazy_static! {
@@ -69,15 +65,15 @@ pub(crate) async fn process_install_cmd(
 }
 
 pub(crate) async fn process_update_cmd() -> Result<()> {
-    let platform = get_platform()?;
     let safe_config_dir_path = get_safe_config_dir_path()?;
     let settings_file_path = safe_config_dir_path.join("safeup.json");
     let settings = Settings::read(&settings_file_path)?;
-    let release_repository = GithubReleaseRepository::new(GITHUB_API_URL, ORG_NAME, REPO_NAME);
+    let release_repo = <dyn SafeReleaseRepositoryInterface>::default_config();
+
     for asset_type in AssetType::variants() {
         println!("Retrieving latest version for {asset_type}...");
-        let (_, latest_version) = release_repository
-            .get_latest_asset_name(&asset_type, &platform)
+        let latest_version = release_repo
+            .get_latest_version(&asset_type.get_release_type())
             .await?;
         println!("Latest version of {asset_type} is {latest_version}");
         if settings.is_installed(&asset_type) {
@@ -86,6 +82,7 @@ pub(crate) async fn process_update_cmd() -> Result<()> {
                 settings.get_installed_version(&asset_type)
             );
         }
+
         let decision = perform_update_assessment(&asset_type, &latest_version, &settings)?;
         match decision {
             UpdateAssessmentResult::PerformUpdate => {
@@ -153,12 +150,10 @@ async fn do_install_binary(
     version: Option<String>,
 ) -> Result<()> {
     let platform = get_platform()?;
-    let asset_repository = S3AssetRepository::new(ASSET_TYPE_BUCKET_MAP[asset_type]);
-    let release_repository = GithubReleaseRepository::new(GITHUB_API_URL, ORG_NAME, REPO_NAME);
+    let release_repo = <dyn SafeReleaseRepositoryInterface>::default_config();
     let (installed_version, bin_path) = crate::install::install_bin(
         asset_type.clone(),
-        release_repository,
-        asset_repository,
+        release_repo,
         &platform,
         dest_dir_path.clone(),
         version,
