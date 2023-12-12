@@ -6,27 +6,25 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use crate::github::GithubReleaseRepository;
-use crate::s3::S3AssetRepository;
 #[cfg(windows)]
 use color_eyre::{eyre::eyre, Help, Result};
 #[cfg(unix)]
 use color_eyre::{eyre::eyre, Result};
-use flate2::read::GzDecoder;
+use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use indoc::indoc;
 use serde_derive::{Deserialize, Serialize};
+use sn_releases::{get_running_platform, ArchiveType, ReleaseType, SafeReleaseRepositoryInterface};
 use std::env::consts::OS;
 use std::fs::{File, OpenOptions};
 #[cfg(unix)]
 use std::io::prelude::*;
-use std::io::BufWriter;
 #[cfg(windows)]
 use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use tar::Archive;
+use std::sync::Arc;
 #[cfg(windows)]
 use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_SET_VALUE};
 #[cfg(windows)]
@@ -57,6 +55,14 @@ pub enum AssetType {
 impl AssetType {
     pub fn variants() -> Vec<AssetType> {
         vec![AssetType::Client, AssetType::Node, AssetType::Testnet]
+    }
+
+    pub fn get_release_type(&self) -> ReleaseType {
+        match self {
+            AssetType::Client => ReleaseType::Safe,
+            AssetType::Node => ReleaseType::Safenode,
+            AssetType::Testnet => ReleaseType::Testnet,
+        }
     }
 }
 
@@ -198,8 +204,7 @@ pub fn check_prerequisites() -> Result<()> {
 /// A tuple of the version number and full path of the installed binary.
 pub async fn install_bin(
     asset_type: AssetType,
-    release_repository: GithubReleaseRepository,
-    asset_repository: S3AssetRepository,
+    release_repo: Box<dyn SafeReleaseRepositoryInterface>,
     platform: &str,
     dest_dir_path: PathBuf,
     version: Option<String>,
@@ -213,47 +218,53 @@ pub async fn install_bin(
     );
     std::fs::create_dir_all(&dest_dir_path)?;
 
-    let (asset_name, version) = if let Some(version) = version {
-        let asset_name =
-            release_repository.get_versioned_asset_name(&asset_type, platform, &version);
-        (asset_name, version)
+    let pb = Arc::new(ProgressBar::new(0));
+    pb.set_style(ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+        .progress_chars("#>-"));
+    let pb_clone = pb.clone();
+    let callback: Box<dyn Fn(u64, u64) + Send + Sync> = Box::new(move |downloaded, total| {
+        pb_clone.set_length(total);
+        pb_clone.set_position(downloaded);
+    });
+
+    let version = if let Some(version) = version {
+        version
     } else {
         println!("Retrieving latest version for {asset_type}...");
-        release_repository
-            .get_latest_asset_name(&asset_type, platform)
+        release_repo
+            .get_latest_version(&asset_type.get_release_type())
             .await?
     };
 
+    let temp_dir = tempfile::tempdir()?;
+
     println!("Installing {asset_type} version {version}...");
-    let archive_path = dest_dir_path.join(&asset_name);
-    asset_repository
-        .download_asset(&asset_name, &archive_path)
+    let archive_path = release_repo
+        .download_release_from_s3(
+            &asset_type.get_release_type(),
+            &version,
+            &get_running_platform()?,
+            &ArchiveType::TarGz,
+            temp_dir.path(),
+            &callback,
+        )
         .await?;
+    pb.finish_with_message("Download complete");
 
-    let archive_file = File::open(archive_path.clone())?;
-    let decoder = GzDecoder::new(archive_file);
-    let mut archive = Archive::new(decoder);
-    let entries = archive.entries()?;
-    for entry_result in entries {
-        let mut entry = entry_result?;
-        let mut file = BufWriter::new(File::create(dest_dir_path.join(entry.path()?))?);
-        std::io::copy(&mut entry, &mut file)?;
-    }
-    std::fs::remove_file(archive_path)?;
-
+    let bin_path = release_repo.extract_release_archive(&archive_path, &dest_dir_path)?;
     #[cfg(unix)]
     {
-        let extracted_binary_path = dest_dir_path.join(&bin_name);
-        let mut perms = extracted_binary_path.metadata()?.permissions();
+        let mut perms = bin_path.metadata()?.permissions();
         perms.set_mode(0o755);
-        std::fs::set_permissions(extracted_binary_path, perms)?;
+        std::fs::set_permissions(bin_path.clone(), perms)?;
     }
 
-    let bin_path = dest_dir_path.join(bin_name.clone());
-    let full_path = bin_path
-        .to_str()
-        .ok_or_else(|| eyre!("Could not obtain path for shell profile"))?;
-    println!("{bin_name} {version} is now available at {full_path}");
+    println!(
+        "{bin_name} {version} is now available at {}",
+        bin_path.to_string_lossy()
+    );
+
     Ok((version, bin_path))
 }
 
@@ -351,14 +362,16 @@ mod test {
     use super::{configure_shell_profile, install_bin, AssetType, Settings, SET_PATH_FILE_CONTENT};
     #[cfg(windows)]
     use super::{install_bin, AssetType, Settings};
-    use crate::github::GithubReleaseRepository;
-    use crate::s3::S3AssetRepository;
     use assert_fs::prelude::*;
+    use async_trait::async_trait;
     use color_eyre::Result;
-    use flate2::write::GzEncoder;
-    use flate2::Compression;
-    use httpmock::prelude::*;
-    use std::fs::File;
+    use mockall::mock;
+    use mockall::predicate::*;
+    use mockall::Sequence;
+    use sn_releases::{
+        ArchiveType, Platform, ProgressCallback, ReleaseType, Result as SnReleaseResult,
+        SafeReleaseRepositoryInterface,
+    };
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     #[cfg(windows)]
@@ -381,224 +394,234 @@ mod test {
     #[cfg(windows)]
     const PLATFORM: &str = "x86_64-pc-windows-msvc";
 
+    mock! {
+        pub SafeReleaseRepository {}
+        #[async_trait]
+        impl SafeReleaseRepositoryInterface for SafeReleaseRepository {
+            async fn get_latest_version(&self, release_type: &ReleaseType) -> SnReleaseResult<String>;
+            async fn download_release_from_s3(
+                &self,
+                release_type: &ReleaseType,
+                version: &str,
+                platform: &Platform,
+                archive_type: &ArchiveType,
+                download_dir: &Path,
+                callback: &ProgressCallback
+            ) -> SnReleaseResult<PathBuf>;
+            async fn download_release(
+                &self,
+                url: &str,
+                dest_dir_path: &Path,
+                callback: &ProgressCallback,
+            ) -> SnReleaseResult<PathBuf>;
+            fn extract_release_archive(&self, archive_path: &Path, extract_dir: &Path) -> SnReleaseResult<PathBuf>;
+        }
+    }
+
     #[tokio::test]
     async fn install_bin_should_install_the_latest_version() -> Result<()> {
-        let github_server = MockServer::start();
-        let releases_response_body = std::fs::read_to_string(
-            std::path::Path::new("resources").join("releases_response_body.json"),
-        )?;
-        let releases_list_mock = github_server.mock(|when, then| {
-            when.method(GET)
-                .path("/repos/maidsafe/safe_network/releases");
-            then.status(200)
-                .header("server", "Github.com")
-                .body(releases_response_body);
-        });
+        let latest_version = "0.86.55";
+        let temp_dir = assert_fs::TempDir::new()?;
 
-        let sn_cli_response_body = std::fs::read_to_string(
-            std::path::Path::new("resources").join("sn_cli_release_response_body.json"),
-        )?;
-        let release_by_tag_mock = github_server.mock(|when, then| {
-            when.method(GET)
-                .path("/repos/maidsafe/safe_network/releases/tags/sn_cli-v0.77.13");
-            then.status(200)
-                .header("server", "Github.com")
-                .body(sn_cli_response_body);
-        });
+        let install_dir = temp_dir.child("install");
+        let installed_safe = install_dir.child("safe");
+        // By creating this file we are 'pretending' that it was extracted to the specified
+        // location. It's done so we can assert that the file is made executable.
+        installed_safe.write_binary(b"fake safe bin")?;
 
-        let tmp_data_path = assert_fs::TempDir::new()?;
-        let extract_dir = tmp_data_path.child("extract");
-        extract_dir.create_dir_all()?;
-        let extracted_safe_bin = extract_dir.child(SAFE_BIN_NAME);
+        let mut mock_release_repo = MockSafeReleaseRepository::new();
+        let mut seq = Sequence::new();
+        mock_release_repo
+            .expect_get_latest_version()
+            .times(1)
+            .returning(|_| Ok(latest_version.to_string()))
+            .in_sequence(&mut seq);
 
-        let safe_archive = tmp_data_path.child("safe.tar.gz");
-        let downloaded_safe_archive =
-            extract_dir.child(format!("safe-0.77.13-{}.tar.gz", PLATFORM));
-        let fake_safe_bin = tmp_data_path.child(SAFE_BIN_NAME);
-        fake_safe_bin.write_binary(b"fake code")?;
+        mock_release_repo
+            .expect_download_release_from_s3()
+            .with(
+                eq(&ReleaseType::Safenode),
+                eq(latest_version),
+                always(), // Varies per platform
+                eq(&ArchiveType::TarGz),
+                always(), // Temporary directory which doesn't really matter
+                always(), // Callback for progress bar which also doesn't matter
+            )
+            .times(1)
+            .returning(move |_, _, _, _, _, _| {
+                Ok(PathBuf::from(format!(
+                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    latest_version
+                )))
+            })
+            .in_sequence(&mut seq);
 
-        let mut fake_safe_bin_file = File::open(fake_safe_bin.path())?;
-        let gz_encoder = GzEncoder::new(File::create(safe_archive.path())?, Compression::default());
-        let mut builder = tar::Builder::new(gz_encoder);
-        builder.append_file(SAFE_BIN_NAME, &mut fake_safe_bin_file)?;
-        builder.into_inner()?;
-        let safe_archive_metadata = std::fs::metadata(safe_archive.path())?;
+        let mut install_dir_path_clone = install_dir.to_path_buf().clone();
+        install_dir_path_clone.push("safe");
+        mock_release_repo
+            .expect_extract_release_archive()
+            .with(
+                eq(PathBuf::from(format!(
+                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    latest_version
+                ))),
+                always(), // We will extract to a temporary directory
+            )
+            .times(1)
+            .returning(move |_, _| Ok(install_dir_path_clone.clone()))
+            .in_sequence(&mut seq);
 
-        let asset_server = MockServer::start();
-        let download_asset_mock = asset_server.mock(|when, then| {
-            when.method(GET)
-                .path(format!("/safe-0.77.13-{}.tar.gz", PLATFORM));
-            then.status(200)
-                .header("Content-Length", safe_archive_metadata.len().to_string())
-                .header("Content-Type", "application/gzip")
-                .body_from_file(safe_archive.path().to_str().unwrap());
-        });
-
-        let asset_repository = S3AssetRepository::new(&asset_server.base_url());
-        let release_repository =
-            GithubReleaseRepository::new(&github_server.base_url(), "maidsafe", "safe_network");
         let (version, bin_path) = install_bin(
             AssetType::Client,
-            release_repository,
-            asset_repository,
+            Box::new(mock_release_repo),
             PLATFORM,
-            extract_dir.path().to_path_buf(),
+            install_dir.path().to_path_buf(),
             None,
         )
         .await?;
 
-        download_asset_mock.assert();
-        releases_list_mock.assert();
-        release_by_tag_mock.assert();
-        extracted_safe_bin.assert(predicates::path::is_file());
-        downloaded_safe_archive.assert(predicates::path::missing());
-        assert_eq!(version, "0.77.13");
-        assert_eq!(bin_path, extracted_safe_bin.to_path_buf());
+        assert_eq!(version, "0.86.55");
+        assert_eq!(bin_path, installed_safe.to_path_buf());
 
         #[cfg(unix)]
         {
-            let extracted_safe_metadata = std::fs::metadata(extracted_safe_bin.path())?;
+            let extracted_safe_metadata = std::fs::metadata(installed_safe.path())?;
             assert_eq!(
                 (extracted_safe_metadata.permissions().mode() & 0o777),
                 0o755
             );
         }
+
         Ok(())
     }
 
     #[tokio::test]
     async fn install_bin_when_parent_dirs_in_dest_path_do_not_exist_should_install_the_latest_version(
     ) -> Result<()> {
-        let github_server = MockServer::start();
-        let releases_response_body = std::fs::read_to_string(
-            std::path::Path::new("resources").join("releases_response_body.json"),
-        )?;
-        let releases_list_mock = github_server.mock(|when, then| {
-            when.method(GET)
-                .path("/repos/maidsafe/safe_network/releases");
-            then.status(200)
-                .header("server", "Github.com")
-                .body(releases_response_body);
-        });
+        let latest_version = "0.86.55";
+        let temp_dir = assert_fs::TempDir::new()?;
 
-        let sn_cli_response_body = std::fs::read_to_string(
-            std::path::Path::new("resources").join("sn_cli_release_response_body.json"),
-        )?;
-        let release_by_tag_mock = github_server.mock(|when, then| {
-            when.method(GET)
-                .path("/repos/maidsafe/safe_network/releases/tags/sn_cli-v0.77.13");
-            then.status(200)
-                .header("server", "Github.com")
-                .body(sn_cli_response_body);
-        });
-        let tmp_data_path = assert_fs::TempDir::new()?;
-        let extract_dir = tmp_data_path.child(
-            PathBuf::from("extract")
-                .join("when")
-                .join("parents")
-                .join("do")
-                .join("not")
-                .join("exist"),
-        );
-        let extracted_safe_bin = extract_dir.child(SAFE_BIN_NAME);
+        let install_dir = temp_dir.child("install/using/many/paths");
+        let installed_safe = install_dir.child("safe");
+        // By creating this file we are 'pretending' that it was extracted to the specified
+        // location. It's done so we can assert that the file is made executable.
+        installed_safe.write_binary(b"fake safe bin")?;
 
-        let safe_archive = tmp_data_path.child("safe.tar.gz");
-        let downloaded_safe_archive =
-            extract_dir.child(format!("safe-0.77.13-{}.tar.gz", PLATFORM));
-        let fake_safe_bin = tmp_data_path.child(SAFE_BIN_NAME);
-        fake_safe_bin.write_binary(b"fake code")?;
+        let mut mock_release_repo = MockSafeReleaseRepository::new();
+        let mut seq = Sequence::new();
+        mock_release_repo
+            .expect_get_latest_version()
+            .times(1)
+            .returning(|_| Ok(latest_version.to_string()))
+            .in_sequence(&mut seq);
 
-        let mut fake_safe_bin_file = File::open(fake_safe_bin.path())?;
-        let gz_encoder = GzEncoder::new(File::create(safe_archive.path())?, Compression::default());
-        let mut builder = tar::Builder::new(gz_encoder);
-        builder.append_file(SAFE_BIN_NAME, &mut fake_safe_bin_file)?;
-        builder.into_inner()?;
-        let safe_archive_metadata = std::fs::metadata(safe_archive.path())?;
+        mock_release_repo
+            .expect_download_release_from_s3()
+            .with(
+                eq(&ReleaseType::Safenode),
+                eq(latest_version),
+                always(), // Varies per platform
+                eq(&ArchiveType::TarGz),
+                always(), // Temporary directory which doesn't really matter
+                always(), // Callback for progress bar which also doesn't matter
+            )
+            .times(1)
+            .returning(move |_, _, _, _, _, _| {
+                Ok(PathBuf::from(format!(
+                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    latest_version
+                )))
+            })
+            .in_sequence(&mut seq);
 
-        let asset_server = MockServer::start();
-        let download_asset_mock = asset_server.mock(|when, then| {
-            when.method(GET)
-                .path(format!("/safe-0.77.13-{}.tar.gz", PLATFORM));
-            then.status(200)
-                .header("Content-Length", safe_archive_metadata.len().to_string())
-                .header("Content-Type", "application/gzip")
-                .body_from_file(safe_archive.path().to_str().unwrap());
-        });
+        let mut install_dir_path_clone = install_dir.to_path_buf().clone();
+        install_dir_path_clone.push("safe");
+        mock_release_repo
+            .expect_extract_release_archive()
+            .with(
+                eq(PathBuf::from(format!(
+                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    latest_version
+                ))),
+                always(), // We will extract to a temporary directory
+            )
+            .times(1)
+            .returning(move |_, _| Ok(install_dir_path_clone.clone()))
+            .in_sequence(&mut seq);
 
-        let asset_repository = S3AssetRepository::new(&asset_server.base_url());
-        let release_repository =
-            GithubReleaseRepository::new(&github_server.base_url(), "maidsafe", "safe_network");
         let (version, bin_path) = install_bin(
             AssetType::Client,
-            release_repository,
-            asset_repository,
+            Box::new(mock_release_repo),
             PLATFORM,
-            extract_dir.path().to_path_buf(),
+            install_dir.path().to_path_buf(),
             None,
         )
         .await?;
 
-        download_asset_mock.assert();
-        releases_list_mock.assert();
-        release_by_tag_mock.assert();
-        extracted_safe_bin.assert(predicates::path::is_file());
-        downloaded_safe_archive.assert(predicates::path::missing());
-        assert_eq!(version, "0.77.13");
-        assert_eq!(bin_path, extracted_safe_bin.to_path_buf());
+        assert_eq!(version, "0.86.55");
+        assert_eq!(bin_path, installed_safe.to_path_buf());
+
         Ok(())
     }
 
-    /// For installing a specific version, no request is made to the Github API, so the mocked
-    /// Github server is not necessary.
     #[tokio::test]
     async fn install_bin_should_install_a_specific_version() -> Result<()> {
-        let specific_version = "0.74.5";
-        let tmp_data_path = assert_fs::TempDir::new()?;
-        let extract_dir = tmp_data_path.child("extract");
-        extract_dir.create_dir_all()?;
-        let extracted_safe_bin = extract_dir.child(SAFE_BIN_NAME);
+        let specific_version = "0.85.0";
+        let temp_dir = assert_fs::TempDir::new()?;
 
-        let safe_archive = tmp_data_path.child("safe.tar.gz");
-        let downloaded_safe_archive =
-            extract_dir.child(format!("safe-{specific_version}-{}.tar.gz", PLATFORM));
-        let fake_safe_bin = tmp_data_path.child(SAFE_BIN_NAME);
-        fake_safe_bin.write_binary(b"fake code")?;
+        let install_dir = temp_dir.child("install");
+        let installed_safe = install_dir.child("safe");
+        // By creating this file we are 'pretending' that it was extracted to the specified
+        // location. It's done so we can assert that the file is made executable.
+        installed_safe.write_binary(b"fake safe bin")?;
 
-        let mut fake_safe_bin_file = File::open(fake_safe_bin.path())?;
-        let gz_encoder = GzEncoder::new(File::create(safe_archive.path())?, Compression::default());
-        let mut builder = tar::Builder::new(gz_encoder);
-        builder.append_file(SAFE_BIN_NAME, &mut fake_safe_bin_file)?;
-        builder.into_inner()?;
-        let safe_archive_metadata = std::fs::metadata(safe_archive.path())?;
+        let mut mock_release_repo = MockSafeReleaseRepository::new();
+        let mut seq = Sequence::new();
+        mock_release_repo
+            .expect_download_release_from_s3()
+            .with(
+                eq(&ReleaseType::Safenode),
+                eq(specific_version),
+                always(), // Varies per platform
+                eq(&ArchiveType::TarGz),
+                always(), // Temporary directory which doesn't really matter
+                always(), // Callback for progress bar which also doesn't matter
+            )
+            .times(1)
+            .returning(move |_, _, _, _, _, _| {
+                Ok(PathBuf::from(format!(
+                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    specific_version
+                )))
+            })
+            .in_sequence(&mut seq);
 
-        let asset_server = MockServer::start();
-        let download_asset_mock = asset_server.mock(|when, then| {
-            when.method(GET)
-                .path(format!("/safe-{specific_version}-{}.tar.gz", PLATFORM));
-            then.status(200)
-                .header("Content-Length", safe_archive_metadata.len().to_string())
-                .header("Content-Type", "application/gzip")
-                .body_from_file(safe_archive.path().to_str().unwrap());
-        });
+        let mut install_dir_path_clone = install_dir.to_path_buf().clone();
+        install_dir_path_clone.push("safe");
+        mock_release_repo
+            .expect_extract_release_archive()
+            .with(
+                eq(PathBuf::from(format!(
+                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    specific_version
+                ))),
+                always(), // We will extract to a temporary directory
+            )
+            .times(1)
+            .returning(move |_, _| Ok(install_dir_path_clone.clone()))
+            .in_sequence(&mut seq);
 
-        let asset_repository = S3AssetRepository::new(&asset_server.base_url());
-        let release_repository =
-            GithubReleaseRepository::new("localhost", "maidsafe", "safe_network");
         let (version, bin_path) = install_bin(
             AssetType::Client,
-            release_repository,
-            asset_repository,
+            Box::new(mock_release_repo),
             PLATFORM,
-            extract_dir.path().to_path_buf(),
+            install_dir.path().to_path_buf(),
             Some(specific_version.to_string()),
         )
         .await?;
 
-        download_asset_mock.assert();
-        extracted_safe_bin.assert(predicates::path::is_file());
-        downloaded_safe_archive.assert(predicates::path::missing());
         assert_eq!(version, specific_version);
-        assert_eq!(bin_path, extracted_safe_bin.to_path_buf());
+        assert_eq!(bin_path, installed_safe.to_path_buf());
 
         Ok(())
     }
