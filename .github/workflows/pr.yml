@@ -12,6 +12,7 @@ env:
   RUSTFLAGS: "-D warnings"
   CLIENT_VERSION: 0.77.27
   NODE_VERSION: 0.83.25
+  NODE_MANAGER_VERSION: 0.1.8
   TESTNET_VERSION: 0.1.29
 
 jobs:
@@ -140,6 +141,7 @@ jobs:
         run: |
           cargo run -- client --version $env:CLIENT_VERSION
           cargo run -- node --version $env:NODE_VERSION
+          cargo run -- node-manager --version $env:NODE_MANAGER_VERSION
           cargo run -- testnet --version $env:TESTNET_VERSION
       - name: Check if binaries are available in new shell session
         shell: pwsh
@@ -150,6 +152,10 @@ jobs:
           }
           if (!(Test-Path "$env:USERPROFILE\safe\safenode.exe")) {
             Write-Host "safenode.exe does not exist"
+            exit 1
+          }
+          if (!(Test-Path "$env:USERPROFILE\safe\safenode-manager.exe")) {
+            Write-Host "safenode-manager.exe does not exist"
             exit 1
           }
           if (!(Test-Path "$env:USERPROFILE\safe\testnet.exe")) {
@@ -185,6 +191,18 @@ jobs:
             exit 1
           }
 
+          $output = & "${env:USERPROFILE}\safe\safenode-manager.exe" --version
+          $version = $output | Select-String -Pattern "sn-node-manager (\d+\.\d+\.\d+)"
+          $versionNumber = $version.Matches.Groups[1].Value
+          if ($versionNumber -eq "$env:NODE_MANAGER_VERSION") {
+            Write-Host "The correct version of safenode-manager has been installed"
+          } else {
+            Write-Host "The correct version of safenode-manager has not been installed"
+            Write-Host "We expected version $env:NODE_MANAGER_VERSION"
+            Write-Host "The downloaded binary has $versionNumber"
+            exit 1
+          }
+
           $output = & "${env:USERPROFILE}\safe\testnet.exe" --version
           $version = $output | Select-String -Pattern "testnet (\d+\.\d+\.\d+)"
           $versionNumber = $version.Matches.Groups[1].Value
@@ -213,6 +231,7 @@ jobs:
         run: |
           cargo run -- client --version $CLIENT_VERSION
           cargo run -- node --version $NODE_VERSION
+          cargo run -- node-manager --version $NODE_MANAGER_VERSION
           cargo run -- testnet --version $TESTNET_VERSION
       - name: Check if binaries are available in new shell session
         shell: bash
@@ -228,6 +247,7 @@ jobs:
 
           [[ -f "$HOME/.local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
+          [[ -f "$HOME/.local/bin/safenode-manager" ]] || { echo "safenode-manager not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/testnet" ]] || { echo "testnet not in expected location"; exit 1; }
 
           version=$(safe --version | awk '{ print $2 }')
@@ -246,6 +266,16 @@ jobs:
           else
             echo "The correct version of safenode has not been installed"
             echo "We expected $NODE_VERSION"
+            echo "The downloaded binary has $version"
+            exit 1
+          fi
+
+          version=$(safenode-manager --version | awk '{ print $2 }')
+          if [[ "$version" == "$NODE_MANAGER_VERSION" ]]; then
+            echo "The correct version of safenode-manager has been installed"
+          else
+            echo "The correct version of safenode-manager has not been installed"
+            echo "We expected $NODE_MANAGER_VERSION"
             echo "The downloaded binary has $version"
             exit 1
           fi
@@ -275,6 +305,7 @@ jobs:
         run: |
           cargo run -- client --version $CLIENT_VERSION
           cargo run -- node --version $NODE_VERSION
+          cargo run -- node-manager --version $NODE_MANAGER_VERSION
           cargo run -- testnet --version $TESTNET_VERSION
       - name: Check if binaries are available in new shell session
         run: |
@@ -283,6 +314,7 @@ jobs:
 
           [[ -f "$HOME/.local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
+          [[ -f "$HOME/.local/bin/safenode-manager" ]] || { echo "safenode-manager not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/testnet" ]] || { echo "testnet not in expected location"; exit 1; }
 
           version=$(safe --version | awk '{ print $2 }')
@@ -301,6 +333,16 @@ jobs:
           else
             echo "The correct version of safenode has not been installed"
             echo "We expected $NODE_VERSION"
+            echo "The downloaded binary has $version"
+            exit 1
+          fi
+
+          version=$(safenode-manager --version | awk '{ print $2 }')
+          if [[ "$version" == "$NODE_MANAGER_VERSION" ]]; then
+            echo "The correct version of safenode-manager has been installed"
+          else
+            echo "The correct version of safenode-manager has not been installed"
+            echo "We expected $NODE_MANAGER_VERSION"
             echo "The downloaded binary has $version"
             exit 1
           fi
