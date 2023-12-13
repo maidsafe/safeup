@@ -172,6 +172,10 @@ async fn do_install_binary(
             settings.safenode_path = bin_path;
             settings.safenode_version = installed_version;
         }
+        AssetType::NodeManager => {
+            settings.safenode_manager_path = bin_path;
+            settings.safenode_manager_version = installed_version;
+        }
         AssetType::Testnet => {
             settings.testnet_path = bin_path;
             settings.testnet_version = installed_version;

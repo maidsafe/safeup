@@ -49,18 +49,25 @@ const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
 pub enum AssetType {
     Client,
     Node,
+    NodeManager,
     Testnet,
 }
 
 impl AssetType {
     pub fn variants() -> Vec<AssetType> {
-        vec![AssetType::Client, AssetType::Node, AssetType::Testnet]
+        vec![
+            AssetType::Client,
+            AssetType::Node,
+            AssetType::NodeManager,
+            AssetType::Testnet,
+        ]
     }
 
     pub fn get_release_type(&self) -> ReleaseType {
         match self {
             AssetType::Client => ReleaseType::Safe,
             AssetType::Node => ReleaseType::Safenode,
+            AssetType::NodeManager => ReleaseType::SafenodeManager,
             AssetType::Testnet => ReleaseType::Testnet,
         }
     }
@@ -71,6 +78,7 @@ impl std::fmt::Display for AssetType {
         match *self {
             AssetType::Client => write!(f, "safe"),
             AssetType::Node => write!(f, "safenode"),
+            AssetType::NodeManager => write!(f, "safenode-manager"),
             AssetType::Testnet => write!(f, "testnet"),
         }
     }
@@ -82,6 +90,8 @@ pub struct Settings {
     pub safe_version: String,
     pub safenode_path: PathBuf,
     pub safenode_version: String,
+    pub safenode_manager_path: PathBuf,
+    pub safenode_manager_version: String,
     pub testnet_path: PathBuf,
     pub testnet_version: String,
 }
@@ -96,6 +106,8 @@ impl Settings {
                 safe_version: String::new(),
                 safenode_path: PathBuf::new(),
                 safenode_version: String::new(),
+                safenode_manager_path: PathBuf::new(),
+                safenode_manager_version: String::new(),
                 testnet_path: PathBuf::new(),
                 testnet_version: String::new(),
             })
@@ -105,6 +117,8 @@ impl Settings {
                 safe_version: String::new(),
                 safenode_path: PathBuf::new(),
                 safenode_version: String::new(),
+                safenode_manager_path: PathBuf::new(),
+                safenode_manager_version: String::new(),
                 testnet_path: PathBuf::new(),
                 testnet_version: String::new(),
             }
@@ -116,6 +130,7 @@ impl Settings {
         match asset_type {
             AssetType::Client => self.safe_version.clone(),
             AssetType::Node => self.safenode_version.clone(),
+            AssetType::NodeManager => self.safenode_manager_version.clone(),
             AssetType::Testnet => self.testnet_version.clone(),
         }
     }
@@ -124,6 +139,7 @@ impl Settings {
         match asset_type {
             AssetType::Client => !self.safe_version.is_empty(),
             AssetType::Node => !self.safenode_version.is_empty(),
+            AssetType::NodeManager => !self.safenode_manager_version.is_empty(),
             AssetType::Testnet => !self.testnet_version.is_empty(),
         }
     }
@@ -132,6 +148,7 @@ impl Settings {
         match asset_type {
             AssetType::Client => self.safe_path.clone(),
             AssetType::Node => self.safenode_path.clone(),
+            AssetType::NodeManager => self.safenode_manager_path.clone(),
             AssetType::Testnet => self.testnet_path.clone(),
         }
     }
@@ -341,6 +358,7 @@ fn get_bin_name(asset_type: &AssetType) -> String {
     let mut bin_name = match asset_type {
         AssetType::Client => "safe".to_string(),
         AssetType::Node => "safenode".to_string(),
+        AssetType::NodeManager => "safenode-manager".to_string(),
         AssetType::Testnet => "testnet".to_string(),
     };
     if OS == "windows" {
@@ -374,9 +392,6 @@ mod test {
     };
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
-    #[cfg(windows)]
-    use std::path::PathBuf;
-    #[cfg(unix)]
     use std::path::{Path, PathBuf};
 
     /// These may seem pointless, but they are useful for when the tests run on different
@@ -440,7 +455,7 @@ mod test {
         mock_release_repo
             .expect_download_release_from_s3()
             .with(
-                eq(&ReleaseType::Safenode),
+                eq(&ReleaseType::Safe),
                 eq(latest_version),
                 always(), // Varies per platform
                 eq(&ArchiveType::TarGz),
@@ -518,7 +533,7 @@ mod test {
         mock_release_repo
             .expect_download_release_from_s3()
             .with(
-                eq(&ReleaseType::Safenode),
+                eq(&ReleaseType::Safe),
                 eq(latest_version),
                 always(), // Varies per platform
                 eq(&ArchiveType::TarGz),
@@ -580,7 +595,7 @@ mod test {
         mock_release_repo
             .expect_download_release_from_s3()
             .with(
-                eq(&ReleaseType::Safenode),
+                eq(&ReleaseType::Safe),
                 eq(specific_version),
                 always(), // Varies per platform
                 eq(&ArchiveType::TarGz),
@@ -706,6 +721,8 @@ mod test {
         safe_bin_file.write_binary(b"fake safe code")?;
         let safenode_bin_file = tmp_data_path.child("safenode");
         safenode_bin_file.write_binary(b"fake safenode code")?;
+        let safenode_manager_bin_file = tmp_data_path.child("safenode-manager");
+        safenode_manager_bin_file.write_binary(b"fake safenode-manager code")?;
         let testnet_bin_file = tmp_data_path.child("testnet");
         testnet_bin_file.write_binary(b"fake testnet code")?;
 
@@ -714,6 +731,8 @@ mod test {
             safe_version: "v0.75.1".to_string(),
             safenode_path: safenode_bin_file.to_path_buf(),
             safenode_version: "v0.75.2".to_string(),
+            safenode_manager_path: safenode_manager_bin_file.to_path_buf(),
+            safenode_manager_version: "v0.1.8".to_string(),
             testnet_path: testnet_bin_file.to_path_buf(),
             testnet_version: "v0.75.3".to_string(),
         };
@@ -726,6 +745,11 @@ mod test {
         assert_eq!(settings.safe_version, "v0.75.1");
         assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
         assert_eq!(settings.safenode_version, "v0.75.2");
+        assert_eq!(
+            settings.safenode_manager_path,
+            safenode_manager_bin_file.to_path_buf()
+        );
+        assert_eq!(settings.safenode_manager_version, "v0.1.8");
         assert_eq!(settings.testnet_path, testnet_bin_file.to_path_buf());
         assert_eq!(settings.testnet_version, "v0.75.3");
         Ok(())
@@ -744,6 +768,8 @@ mod test {
         safe_bin_file.write_binary(b"fake safe code")?;
         let safenode_bin_file = tmp_data_path.child("safenode");
         safenode_bin_file.write_binary(b"fake safenode code")?;
+        let safenode_manager_bin_file = tmp_data_path.child("safenode-manager");
+        safenode_manager_bin_file.write_binary(b"fake safenode-manager code")?;
         let testnet_bin_file = tmp_data_path.child("testnet");
         testnet_bin_file.write_binary(b"fake testnet code")?;
 
@@ -752,6 +778,8 @@ mod test {
             safe_version: "v0.75.1".to_string(),
             safenode_path: safenode_bin_file.to_path_buf(),
             safenode_version: "v0.75.2".to_string(),
+            safenode_manager_path: safenode_manager_bin_file.to_path_buf(),
+            safenode_manager_version: "v0.1.8".to_string(),
             testnet_path: testnet_bin_file.to_path_buf(),
             testnet_version: "v0.75.3".to_string(),
         };
@@ -764,6 +792,11 @@ mod test {
         assert_eq!(settings.safe_version, "v0.75.1");
         assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
         assert_eq!(settings.safenode_version, "v0.75.2");
+        assert_eq!(
+            settings.safenode_manager_path,
+            safenode_manager_bin_file.to_path_buf()
+        );
+        assert_eq!(settings.safenode_manager_version, "v0.1.8");
         assert_eq!(settings.testnet_path, testnet_bin_file.to_path_buf());
         assert_eq!(settings.testnet_version, "v0.75.3");
         Ok(())
@@ -778,13 +811,12 @@ mod test {
         {
           "safe_path": "/home/chris/.local/safe",
           "safe_version": "v0.75.1",
-          "safe_is_elevated_install": false,
           "safenode_path": "/home/chris/.local/bin/safenode",
           "safenode_version": "v0.75.2",
-          "safenode_is_elevated_install": false,
+          "safenode_manager_path": "/home/chris/.local/bin/safenode-manager",
+          "safenode_manager_version": "v0.1.8",
           "testnet_path": "/home/chris/.local/bin/testnet",
-          "testnet_version": "v0.75.3",
-          "testnet_is_elevated_install": false
+          "testnet_version": "v0.75.3"
         }
         "#,
         )?;
@@ -803,6 +835,11 @@ mod test {
         assert_eq!(settings.safe_version, "v0.75.1");
         assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
         assert_eq!(settings.safenode_version, "v0.75.2");
+        assert_eq!(
+            settings.safenode_manager_path,
+            PathBuf::from("/home/chris/.local/bin/safenode-manager")
+        );
+        assert_eq!(settings.safenode_manager_version, "v0.1.8");
         assert_eq!(
             settings.testnet_path,
             PathBuf::from("/home/chris/.local/bin/testnet")
