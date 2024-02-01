@@ -50,17 +50,11 @@ pub enum AssetType {
     Client,
     Node,
     NodeManager,
-    Testnet,
 }
 
 impl AssetType {
     pub fn variants() -> Vec<AssetType> {
-        vec![
-            AssetType::Client,
-            AssetType::Node,
-            AssetType::NodeManager,
-            AssetType::Testnet,
-        ]
+        vec![AssetType::Client, AssetType::Node, AssetType::NodeManager]
     }
 
     pub fn get_release_type(&self) -> ReleaseType {
@@ -68,7 +62,6 @@ impl AssetType {
             AssetType::Client => ReleaseType::Safe,
             AssetType::Node => ReleaseType::Safenode,
             AssetType::NodeManager => ReleaseType::SafenodeManager,
-            AssetType::Testnet => ReleaseType::Testnet,
         }
     }
 }
@@ -79,7 +72,6 @@ impl std::fmt::Display for AssetType {
             AssetType::Client => write!(f, "safe"),
             AssetType::Node => write!(f, "safenode"),
             AssetType::NodeManager => write!(f, "safenode-manager"),
-            AssetType::Testnet => write!(f, "testnet"),
         }
     }
 }
@@ -92,8 +84,6 @@ pub struct Settings {
     pub safenode_version: String,
     pub safenode_manager_path: PathBuf,
     pub safenode_manager_version: String,
-    pub testnet_path: PathBuf,
-    pub testnet_version: String,
 }
 
 impl Settings {
@@ -108,8 +98,6 @@ impl Settings {
                 safenode_version: String::new(),
                 safenode_manager_path: PathBuf::new(),
                 safenode_manager_version: String::new(),
-                testnet_path: PathBuf::new(),
-                testnet_version: String::new(),
             })
         } else {
             Settings {
@@ -119,8 +107,6 @@ impl Settings {
                 safenode_version: String::new(),
                 safenode_manager_path: PathBuf::new(),
                 safenode_manager_version: String::new(),
-                testnet_path: PathBuf::new(),
-                testnet_version: String::new(),
             }
         };
         Ok(settings)
@@ -131,7 +117,6 @@ impl Settings {
             AssetType::Client => self.safe_version.clone(),
             AssetType::Node => self.safenode_version.clone(),
             AssetType::NodeManager => self.safenode_manager_version.clone(),
-            AssetType::Testnet => self.testnet_version.clone(),
         }
     }
 
@@ -140,7 +125,6 @@ impl Settings {
             AssetType::Client => !self.safe_version.is_empty(),
             AssetType::Node => !self.safenode_version.is_empty(),
             AssetType::NodeManager => !self.safenode_manager_version.is_empty(),
-            AssetType::Testnet => !self.testnet_version.is_empty(),
         }
     }
 
@@ -149,7 +133,6 @@ impl Settings {
             AssetType::Client => self.safe_path.clone(),
             AssetType::Node => self.safenode_path.clone(),
             AssetType::NodeManager => self.safenode_manager_path.clone(),
-            AssetType::Testnet => self.testnet_path.clone(),
         }
     }
 
@@ -359,7 +342,6 @@ fn get_bin_name(asset_type: &AssetType) -> String {
         AssetType::Client => "safe".to_string(),
         AssetType::Node => "safenode".to_string(),
         AssetType::NodeManager => "safenode-manager".to_string(),
-        AssetType::Testnet => "testnet".to_string(),
     };
     if OS == "windows" {
         bin_name.push_str(".exe");
@@ -733,8 +715,6 @@ mod test {
             safenode_version: "v0.75.2".to_string(),
             safenode_manager_path: safenode_manager_bin_file.to_path_buf(),
             safenode_manager_version: "v0.1.8".to_string(),
-            testnet_path: testnet_bin_file.to_path_buf(),
-            testnet_version: "v0.75.3".to_string(),
         };
 
         settings.save(&settings_file.to_path_buf())?;
@@ -750,8 +730,6 @@ mod test {
             safenode_manager_bin_file.to_path_buf()
         );
         assert_eq!(settings.safenode_manager_version, "v0.1.8");
-        assert_eq!(settings.testnet_path, testnet_bin_file.to_path_buf());
-        assert_eq!(settings.testnet_version, "v0.75.3");
         Ok(())
     }
 
@@ -780,8 +758,6 @@ mod test {
             safenode_version: "v0.75.2".to_string(),
             safenode_manager_path: safenode_manager_bin_file.to_path_buf(),
             safenode_manager_version: "v0.1.8".to_string(),
-            testnet_path: testnet_bin_file.to_path_buf(),
-            testnet_version: "v0.75.3".to_string(),
         };
 
         settings.save(&settings_file.to_path_buf())?;
@@ -797,8 +773,6 @@ mod test {
             safenode_manager_bin_file.to_path_buf()
         );
         assert_eq!(settings.safenode_manager_version, "v0.1.8");
-        assert_eq!(settings.testnet_path, testnet_bin_file.to_path_buf());
-        assert_eq!(settings.testnet_version, "v0.75.3");
         Ok(())
     }
 
@@ -814,9 +788,7 @@ mod test {
           "safenode_path": "/home/chris/.local/bin/safenode",
           "safenode_version": "v0.75.2",
           "safenode_manager_path": "/home/chris/.local/bin/safenode-manager",
-          "safenode_manager_version": "v0.1.8",
-          "testnet_path": "/home/chris/.local/bin/testnet",
-          "testnet_version": "v0.75.3"
+          "safenode_manager_version": "v0.1.8"
         }
         "#,
         )?;
@@ -840,11 +812,6 @@ mod test {
             PathBuf::from("/home/chris/.local/bin/safenode-manager")
         );
         assert_eq!(settings.safenode_manager_version, "v0.1.8");
-        assert_eq!(
-            settings.testnet_path,
-            PathBuf::from("/home/chris/.local/bin/testnet")
-        );
-        assert_eq!(settings.testnet_version, "v0.75.3");
         Ok(())
     }
 }
