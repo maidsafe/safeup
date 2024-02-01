@@ -30,8 +30,8 @@ lazy_static! {
             "https://sn-node.s3.eu-west-2.amazonaws.com",
         );
         m.insert(
-            AssetType::Testnet,
-            "https://sn-testnet.s3.eu-west-2.amazonaws.com",
+            AssetType::NodeManager,
+            "https://sn-node-manager.s3.eu-west-2.amazonaws.com",
         );
         m
     };
@@ -175,10 +175,6 @@ async fn do_install_binary(
         AssetType::NodeManager => {
             settings.safenode_manager_path = bin_path;
             settings.safenode_manager_version = installed_version;
-        }
-        AssetType::Testnet => {
-            settings.testnet_path = bin_path;
-            settings.testnet_version = installed_version;
         }
     }
     settings.save(&settings_file_path)?;

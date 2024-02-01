@@ -58,8 +58,6 @@ mod test {
             safenode_version: "v0.83.13".to_string(),
             safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
             safenode_manager_version: "v0.1.8".to_string(),
-            testnet_path: PathBuf::from("/home/chris/.local/bin/testnet"),
-            testnet_version: "v0.3.4".to_string(),
         };
         let decision = perform_update_assessment(&AssetType::Client, "v0.78.26", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
@@ -71,8 +69,6 @@ mod test {
             safenode_version: String::new(),
             safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
             safenode_manager_version: "v0.1.8".to_string(),
-            testnet_path: PathBuf::from("/home/chris/.local/bin/testnet"),
-            testnet_version: "v0.3.4".to_string(),
         };
         let decision = perform_update_assessment(&AssetType::Node, "v0.83.13", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
@@ -84,23 +80,8 @@ mod test {
             safenode_version: "v0.83.13".to_string(),
             safenode_manager_path: PathBuf::new(),
             safenode_manager_version: String::new(),
-            testnet_path: PathBuf::from("/home/chris/.local/bin/testnet"),
-            testnet_version: "v0.3.4".to_string(),
         };
         let decision = perform_update_assessment(&AssetType::NodeManager, "v0.1.8", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
-
-        let settings = Settings {
-            safe_path: PathBuf::from("/home/chris/.local/safe"),
-            safe_version: "v0.78.26".to_string(),
-            safenode_path: PathBuf::from("/home/chris/.local/bin/safenode"),
-            safenode_version: "v0.83.13".to_string(),
-            safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
-            safenode_manager_version: "v0.1.8".to_string(),
-            testnet_path: PathBuf::new(),
-            testnet_version: String::new(),
-        };
-        let decision = perform_update_assessment(&AssetType::Testnet, "v0.3.4", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
 
         Ok(())
@@ -115,8 +96,6 @@ mod test {
             safenode_version: "v0.83.13".to_string(),
             safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
             safenode_manager_version: "v0.1.8".to_string(),
-            testnet_path: PathBuf::from("/home/chris/.local/bin/testnet"),
-            testnet_version: "v0.3.4".to_string(),
         };
 
         let decision = perform_update_assessment(&AssetType::Client, "v0.78.26", &settings)?;
@@ -126,9 +105,6 @@ mod test {
         assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
 
         let decision = perform_update_assessment(&AssetType::NodeManager, "v0.1.8", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
-
-        let decision = perform_update_assessment(&AssetType::Testnet, "v0.3.4", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
 
         Ok(())
@@ -144,8 +120,6 @@ mod test {
             safenode_version: "v0.83.13".to_string(),
             safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
             safenode_manager_version: "v0.1.8".to_string(),
-            testnet_path: PathBuf::from("/home/chris/.local/bin/testnet"),
-            testnet_version: "v0.3.4".to_string(),
         };
 
         let result = perform_update_assessment(&AssetType::Client, "v0.76.0", &settings);
@@ -196,8 +170,6 @@ mod test {
             safenode_version: "v0.83.13".to_string(),
             safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
             safenode_manager_version: "v0.1.7".to_string(),
-            testnet_path: PathBuf::from("/home/chris/.local/bin/testnet"),
-            testnet_version: "v0.3.4".to_string(),
         };
 
         let decision = perform_update_assessment(&AssetType::Client, "v0.78.27", &settings)?;
@@ -207,9 +179,6 @@ mod test {
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         let decision = perform_update_assessment(&AssetType::NodeManager, "v0.1.8", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
-
-        let decision = perform_update_assessment(&AssetType::Testnet, "v0.3.5", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         Ok(())
@@ -225,8 +194,6 @@ mod test {
             safenode_version: "v0.83.13".to_string(),
             safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
             safenode_manager_version: "v0.1.7".to_string(),
-            testnet_path: PathBuf::from("/home/chris/.local/bin/testnet"),
-            testnet_version: "v0.3.4".to_string(),
         };
 
         let decision = perform_update_assessment(&AssetType::Client, "v0.79.0", &settings)?;
@@ -236,9 +203,6 @@ mod test {
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         let decision = perform_update_assessment(&AssetType::NodeManager, "v0.2.0", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
-
-        let decision = perform_update_assessment(&AssetType::Testnet, "v0.4.0", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         Ok(())
@@ -254,8 +218,6 @@ mod test {
             safenode_version: "v0.83.13".to_string(),
             safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
             safenode_manager_version: "v0.1.7".to_string(),
-            testnet_path: PathBuf::from("/home/chris/.local/bin/testnet"),
-            testnet_version: "v0.3.4".to_string(),
         };
 
         let decision = perform_update_assessment(&AssetType::Client, "v1.0.0", &settings)?;
@@ -265,9 +227,6 @@ mod test {
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         let decision = perform_update_assessment(&AssetType::NodeManager, "v1.0.0", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
-
-        let decision = perform_update_assessment(&AssetType::Testnet, "v1.0.0", &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
 
         Ok(())
@@ -282,8 +241,6 @@ mod test {
             safenode_version: "0.83.13".to_string(),
             safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
             safenode_manager_version: "v0.1.7".to_string(),
-            testnet_path: PathBuf::from("/home/chris/.local/bin/testnet"),
-            testnet_version: "0.3.4".to_string(),
         };
 
         let decision = perform_update_assessment(&AssetType::Client, "0.78.27", &settings)?;
