@@ -11,7 +11,8 @@ use crate::update::{perform_update_assessment, UpdateAssessmentResult};
 use color_eyre::{eyre::eyre, Result};
 use lazy_static::lazy_static;
 use prettytable::{Cell, Row, Table};
-use sn_releases::SafeReleaseRepositoryInterface;
+use semver::Version;
+use sn_releases::SafeReleaseRepoActions;
 use std::collections::HashMap;
 use std::env::consts::{ARCH, OS};
 use std::path::PathBuf;
@@ -50,6 +51,11 @@ pub(crate) async fn process_install_cmd(
         get_default_install_path()?
     };
 
+    let version = if let Some(version) = version {
+        Some(Version::parse(&version)?)
+    } else {
+        None
+    };
     do_install_binary(&asset_type, dest_dir_path.clone(), version).await?;
 
     if !no_modify_shell_profile {
@@ -68,7 +74,7 @@ pub(crate) async fn process_update_cmd() -> Result<()> {
     let safe_config_dir_path = get_safe_config_dir_path()?;
     let settings_file_path = safe_config_dir_path.join("safeup.json");
     let settings = Settings::read(&settings_file_path)?;
-    let release_repo = <dyn SafeReleaseRepositoryInterface>::default_config();
+    let release_repo = <dyn SafeReleaseRepoActions>::default_config();
 
     for asset_type in AssetType::variants() {
         println!("Retrieving latest version for {asset_type}...");
@@ -76,18 +82,11 @@ pub(crate) async fn process_update_cmd() -> Result<()> {
             .get_latest_version(&asset_type.get_release_type())
             .await?;
         println!("Latest version of {asset_type} is {latest_version}");
-        if settings.is_installed(&asset_type) {
-            println!(
-                "Current version of {asset_type} is {}",
-                settings.get_installed_version(&asset_type)
-            );
-        }
 
         let decision = perform_update_assessment(&asset_type, &latest_version, &settings)?;
         match decision {
-            UpdateAssessmentResult::PerformUpdate => {
+            UpdateAssessmentResult::PerformUpdate(installed_path) => {
                 println!("Updating {asset_type} to {latest_version}...");
-                let installed_path = settings.get_install_path(&asset_type).clone();
                 let installed_dir_path = installed_path
                     .parent()
                     .ok_or_else(|| eyre!("could not retrieve parent directory"))?;
@@ -126,19 +125,21 @@ pub(crate) fn process_ls_command() -> Result<()> {
         Cell::new("Path"),
     ]));
     for asset_type in AssetType::variants() {
-        let installed_path = settings.get_install_path(&asset_type);
-        let wrapped_install_path = textwrap::wrap(
-            installed_path
-                .to_str()
-                .ok_or_else(|| eyre!("could not obtain install path"))?,
-            WRAP_LENGTH,
-        )
-        .join("\n");
-        table.add_row(Row::new(vec![
-            Cell::new(&asset_type.to_string()),
-            Cell::new(&settings.get_installed_version(&asset_type)),
-            Cell::new(&wrapped_install_path),
-        ]));
+        if let Some((installed_path, installed_version)) = settings.get_install_details(&asset_type)
+        {
+            let wrapped_install_path = textwrap::wrap(
+                installed_path
+                    .to_str()
+                    .ok_or_else(|| eyre!("could not obtain install path"))?,
+                WRAP_LENGTH,
+            )
+            .join("\n");
+            table.add_row(Row::new(vec![
+                Cell::new(&asset_type.to_string()),
+                Cell::new(&installed_version.to_string()),
+                Cell::new(&wrapped_install_path),
+            ]));
+        }
     }
     table.printstd();
     Ok(())
@@ -147,10 +148,10 @@ pub(crate) fn process_ls_command() -> Result<()> {
 async fn do_install_binary(
     asset_type: &AssetType,
     dest_dir_path: PathBuf,
-    version: Option<String>,
+    version: Option<Version>,
 ) -> Result<()> {
     let platform = get_platform()?;
-    let release_repo = <dyn SafeReleaseRepositoryInterface>::default_config();
+    let release_repo = <dyn SafeReleaseRepoActions>::default_config();
     let (installed_version, bin_path) = crate::install::install_bin(
         asset_type.clone(),
         release_repo,
@@ -165,16 +166,16 @@ async fn do_install_binary(
     let mut settings = Settings::read(&settings_file_path)?;
     match asset_type {
         AssetType::Client => {
-            settings.safe_path = bin_path;
-            settings.safe_version = installed_version;
+            settings.safe_path = Some(bin_path);
+            settings.safe_version = Some(installed_version);
         }
         AssetType::Node => {
-            settings.safenode_path = bin_path;
-            settings.safenode_version = installed_version;
+            settings.safenode_path = Some(bin_path);
+            settings.safenode_version = Some(installed_version);
         }
         AssetType::NodeManager => {
-            settings.safenode_manager_path = bin_path;
-            settings.safenode_manager_version = installed_version;
+            settings.safenode_manager_path = Some(bin_path);
+            settings.safenode_manager_version = Some(installed_version);
         }
     }
     settings.save(&settings_file_path)?;

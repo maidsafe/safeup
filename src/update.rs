@@ -1,12 +1,13 @@
 use crate::install::{AssetType, Settings};
 use semver::Version;
 use std::cmp::Ordering;
+use std::path::PathBuf;
 
 use color_eyre::{eyre::eyre, Help, Result};
 
 #[derive(Clone, Debug)]
 pub enum UpdateAssessmentResult {
-    PerformUpdate,
+    PerformUpdate(PathBuf),
     NoPreviousInstallation,
     AtLatestVersion,
 }
@@ -20,26 +21,23 @@ pub enum UpdateAssessmentResult {
 /// * Otherwise, if there is a newer version available, we'll perform the upgrade.
 pub fn perform_update_assessment(
     asset_type: &AssetType,
-    latest_version: &str,
+    latest_version: &Version,
     settings: &Settings,
 ) -> Result<UpdateAssessmentResult> {
-    if !settings.is_installed(asset_type) {
-        return Ok(UpdateAssessmentResult::NoPreviousInstallation);
+    if let Some((installed_path, installed_version)) = settings.get_install_details(asset_type) {
+        println!("Current version of {asset_type} is {installed_version}");
+        match latest_version.cmp(&installed_version) {
+            Ordering::Equal => return Ok(UpdateAssessmentResult::AtLatestVersion),
+            Ordering::Less => {
+                return Err(eyre!(
+                    "The latest version is less than the current version of your binary."
+                )
+                .suggestion("You may want to remove your safeup.conf and install safeup again."))
+            }
+            Ordering::Greater => return Ok(UpdateAssessmentResult::PerformUpdate(installed_path)),
+        }
     }
-    match compare_versions(latest_version, &settings.get_installed_version(asset_type))? {
-        Ordering::Equal => Ok(UpdateAssessmentResult::AtLatestVersion),
-        Ordering::Less => Err(eyre!(
-            "The latest version is less than the current version of your binary."
-        )
-        .suggestion("You may want to remove your safeup.conf and install safeup again.")),
-        Ordering::Greater => Ok(UpdateAssessmentResult::PerformUpdate),
-    }
-}
-
-fn compare_versions(version_a: &str, version_b: &str) -> Result<Ordering> {
-    let v1 = Version::parse(version_a.strip_prefix('v').unwrap_or(version_a))?;
-    let v2 = Version::parse(version_b.strip_prefix('v').unwrap_or(version_b))?;
-    Ok(v1.cmp(&v2))
+    Ok(UpdateAssessmentResult::NoPreviousInstallation)
 }
 
 #[cfg(test)]
@@ -47,41 +45,45 @@ mod test {
     use super::{perform_update_assessment, UpdateAssessmentResult};
     use crate::install::{AssetType, Settings};
     use color_eyre::{eyre::eyre, Result};
+    use semver::Version;
     use std::path::PathBuf;
 
     #[test]
     fn perform_upgrade_assessment_should_indicate_no_previous_installation() -> Result<()> {
         let settings = Settings {
-            safe_path: PathBuf::new(),
-            safe_version: String::new(),
-            safenode_path: PathBuf::from("/home/chris/.local/bin/safenode"),
-            safenode_version: "v0.83.13".to_string(),
-            safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
-            safenode_manager_version: "v0.1.8".to_string(),
+            safe_path: None,
+            safe_version: None,
+            safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
+            safenode_version: Some(Version::new(0, 83, 13)),
+            safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
+            safenode_manager_version: Some(Version::new(0, 1, 8)),
         };
-        let decision = perform_update_assessment(&AssetType::Client, "v0.78.26", &settings)?;
+        let decision =
+            perform_update_assessment(&AssetType::Client, &Version::new(0, 78, 26), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
 
         let settings = Settings {
-            safe_path: PathBuf::from("/home/chris/.local/safe"),
-            safe_version: "v0.78.26".to_string(),
-            safenode_path: PathBuf::new(),
-            safenode_version: String::new(),
-            safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
-            safenode_manager_version: "v0.1.8".to_string(),
+            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
+            safe_version: Some(Version::new(0, 78, 26)),
+            safenode_path: None,
+            safenode_version: None,
+            safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
+            safenode_manager_version: Some(Version::new(0, 1, 8)),
         };
-        let decision = perform_update_assessment(&AssetType::Node, "v0.83.13", &settings)?;
+        let decision =
+            perform_update_assessment(&AssetType::Node, &Version::new(0, 83, 13), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
 
         let settings = Settings {
-            safe_path: PathBuf::from("/home/chris/.local/safe"),
-            safe_version: "v0.78.26".to_string(),
-            safenode_path: PathBuf::from("/home/chris/.local/bin/safenode"),
-            safenode_version: "v0.83.13".to_string(),
-            safenode_manager_path: PathBuf::new(),
-            safenode_manager_version: String::new(),
+            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
+            safe_version: Some(Version::new(0, 78, 26)),
+            safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
+            safenode_version: Some(Version::new(0, 83, 13)),
+            safenode_manager_path: None,
+            safenode_manager_version: None,
         };
-        let decision = perform_update_assessment(&AssetType::NodeManager, "v0.1.8", &settings)?;
+        let decision =
+            perform_update_assessment(&AssetType::NodeManager, &Version::new(0, 1, 8), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
 
         Ok(())
@@ -90,21 +92,24 @@ mod test {
     #[test]
     fn perform_upgrade_assessment_should_indicate_we_are_at_latest_version() -> Result<()> {
         let settings = Settings {
-            safe_path: PathBuf::from("/home/chris/.local/safe"),
-            safe_version: "v0.78.26".to_string(),
-            safenode_path: PathBuf::from("/home/chris/.local/bin/safenode"),
-            safenode_version: "v0.83.13".to_string(),
-            safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
-            safenode_manager_version: "v0.1.8".to_string(),
+            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
+            safe_version: Some(Version::new(0, 78, 26)),
+            safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
+            safenode_version: Some(Version::new(0, 83, 13)),
+            safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
+            safenode_manager_version: Some(Version::new(0, 1, 8)),
         };
 
-        let decision = perform_update_assessment(&AssetType::Client, "v0.78.26", &settings)?;
+        let decision =
+            perform_update_assessment(&AssetType::Client, &Version::new(0, 78, 26), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
 
-        let decision = perform_update_assessment(&AssetType::Node, "v0.83.13", &settings)?;
+        let decision =
+            perform_update_assessment(&AssetType::Node, &Version::new(0, 83, 13), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
 
-        let decision = perform_update_assessment(&AssetType::NodeManager, "v0.1.8", &settings)?;
+        let decision =
+            perform_update_assessment(&AssetType::NodeManager, &Version::new(0, 1, 8), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
 
         Ok(())
@@ -114,15 +119,16 @@ mod test {
     fn perform_upgrade_assessment_latest_version_is_less_than_current_should_return_error(
     ) -> Result<()> {
         let settings = Settings {
-            safe_path: PathBuf::from("/home/chris/.local/safe"),
-            safe_version: "v0.78.26".to_string(),
-            safenode_path: PathBuf::from("/home/chris/.local/bin/safenode"),
-            safenode_version: "v0.83.13".to_string(),
-            safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
-            safenode_manager_version: "v0.1.8".to_string(),
+            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
+            safe_version: Some(Version::new(0, 78, 26)),
+            safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
+            safenode_version: Some(Version::new(0, 83, 13)),
+            safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
+            safenode_manager_version: Some(Version::new(0, 1, 8)),
         };
 
-        let result = perform_update_assessment(&AssetType::Client, "v0.76.0", &settings);
+        let result =
+            perform_update_assessment(&AssetType::Client, &Version::new(0, 76, 0), &settings);
         match result {
             Ok(_) => return Err(eyre!("this test should return an error")),
             Err(e) => assert_eq!(
@@ -131,7 +137,8 @@ mod test {
             ),
         }
 
-        let result = perform_update_assessment(&AssetType::Node, "v0.82.0", &settings);
+        let result =
+            perform_update_assessment(&AssetType::Node, &Version::new(0, 81, 0), &settings);
         match result {
             Ok(_) => return Err(eyre!("this test should return an error")),
             Err(e) => assert_eq!(
@@ -140,7 +147,8 @@ mod test {
             ),
         }
 
-        let result = perform_update_assessment(&AssetType::NodeManager, "v0.1.7", &settings);
+        let result =
+            perform_update_assessment(&AssetType::NodeManager, &Version::new(0, 1, 7), &settings);
         match result {
             Ok(_) => return Err(eyre!("this test should return an error")),
             Err(e) => assert_eq!(
@@ -149,14 +157,6 @@ mod test {
             ),
         }
 
-        let result = perform_update_assessment(&AssetType::Node, "v0.2.0", &settings);
-        match result {
-            Ok(_) => return Err(eyre!("this test should return an error")),
-            Err(e) => assert_eq!(
-                "The latest version is less than the current version of your binary.",
-                e.to_string()
-            ),
-        }
         Ok(())
     }
 
@@ -164,22 +164,25 @@ mod test {
     fn perform_upgrade_assessment_should_perform_update_when_latest_patch_version_is_greater(
     ) -> Result<()> {
         let settings = Settings {
-            safe_path: PathBuf::from("/home/chris/.local/safe"),
-            safe_version: "v0.78.26".to_string(),
-            safenode_path: PathBuf::from("/home/chris/.local/bin/safenode"),
-            safenode_version: "v0.83.13".to_string(),
-            safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
-            safenode_manager_version: "v0.1.7".to_string(),
+            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
+            safe_version: Some(Version::new(0, 78, 26)),
+            safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
+            safenode_version: Some(Version::new(0, 83, 13)),
+            safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
+            safenode_manager_version: Some(Version::new(0, 1, 7)),
         };
 
-        let decision = perform_update_assessment(&AssetType::Client, "v0.78.27", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
+        let decision =
+            perform_update_assessment(&AssetType::Client, &Version::new(0, 78, 27), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
-        let decision = perform_update_assessment(&AssetType::Node, "v0.83.14", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
+        let decision =
+            perform_update_assessment(&AssetType::Node, &Version::new(0, 83, 14), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
-        let decision = perform_update_assessment(&AssetType::NodeManager, "v0.1.8", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
+        let decision =
+            perform_update_assessment(&AssetType::NodeManager, &Version::new(0, 1, 8), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
         Ok(())
     }
@@ -188,22 +191,25 @@ mod test {
     fn perform_upgrade_assessment_should_perform_update_when_latest_minor_version_is_greater(
     ) -> Result<()> {
         let settings = Settings {
-            safe_path: PathBuf::from("/home/chris/.local/safe"),
-            safe_version: "v0.78.26".to_string(),
-            safenode_path: PathBuf::from("/home/chris/.local/bin/safenode"),
-            safenode_version: "v0.83.13".to_string(),
-            safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
-            safenode_manager_version: "v0.1.7".to_string(),
+            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
+            safe_version: Some(Version::new(0, 78, 26)),
+            safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
+            safenode_version: Some(Version::new(0, 83, 13)),
+            safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
+            safenode_manager_version: Some(Version::new(0, 1, 7)),
         };
 
-        let decision = perform_update_assessment(&AssetType::Client, "v0.79.0", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
+        let decision =
+            perform_update_assessment(&AssetType::Client, &Version::new(0, 79, 0), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
-        let decision = perform_update_assessment(&AssetType::Node, "v0.84.0", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
+        let decision =
+            perform_update_assessment(&AssetType::Node, &Version::new(0, 84, 0), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
-        let decision = perform_update_assessment(&AssetType::NodeManager, "v0.2.0", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
+        let decision =
+            perform_update_assessment(&AssetType::NodeManager, &Version::new(0, 2, 0), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
         Ok(())
     }
@@ -212,39 +218,25 @@ mod test {
     fn perform_upgrade_assessment_should_perform_update_when_latest_major_version_is_greater(
     ) -> Result<()> {
         let settings = Settings {
-            safe_path: PathBuf::from("/home/chris/.local/safe"),
-            safe_version: "v0.78.26".to_string(),
-            safenode_path: PathBuf::from("/home/chris/.local/bin/safenode"),
-            safenode_version: "v0.83.13".to_string(),
-            safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
-            safenode_manager_version: "v0.1.7".to_string(),
+            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
+            safe_version: Some(Version::new(0, 78, 26)),
+            safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
+            safenode_version: Some(Version::new(0, 83, 13)),
+            safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
+            safenode_manager_version: Some(Version::new(0, 1, 7)),
         };
 
-        let decision = perform_update_assessment(&AssetType::Client, "v1.0.0", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
+        let decision =
+            perform_update_assessment(&AssetType::Client, &Version::new(1, 0, 0), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
-        let decision = perform_update_assessment(&AssetType::Node, "v1.0.0", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
+        let decision =
+            perform_update_assessment(&AssetType::Node, &Version::new(1, 0, 0), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
-        let decision = perform_update_assessment(&AssetType::NodeManager, "v1.0.0", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
-
-        Ok(())
-    }
-
-    #[test]
-    fn perform_upgrade_assessment_should_not_error_when_versions_have_no_leading_v() -> Result<()> {
-        let settings = Settings {
-            safe_path: PathBuf::from("/home/chris/.local/safe"),
-            safe_version: "0.78.26".to_string(),
-            safenode_path: PathBuf::from("/home/chris/.local/bin/safenode"),
-            safenode_version: "0.83.13".to_string(),
-            safenode_manager_path: PathBuf::from("/home/chris/.local/bin/safenode-manager"),
-            safenode_manager_version: "v0.1.7".to_string(),
-        };
-
-        let decision = perform_update_assessment(&AssetType::Client, "0.78.27", &settings)?;
-        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate);
+        let decision =
+            perform_update_assessment(&AssetType::NodeManager, &Version::new(1, 0, 0), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
         Ok(())
     }
