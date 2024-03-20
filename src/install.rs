@@ -13,9 +13,13 @@ use color_eyre::{eyre::eyre, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
 use indoc::indoc;
+use semver::Version;
+use serde::de::Visitor;
+use serde::{Deserializer, Serializer};
 use serde_derive::{Deserialize, Serialize};
-use sn_releases::{get_running_platform, ArchiveType, ReleaseType, SafeReleaseRepositoryInterface};
+use sn_releases::{get_running_platform, ArchiveType, ReleaseType, SafeReleaseRepoActions};
 use std::env::consts::OS;
+use std::fmt;
 use std::fs::{File, OpenOptions};
 #[cfg(unix)]
 use std::io::prelude::*;
@@ -78,12 +82,82 @@ impl std::fmt::Display for AssetType {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
-    pub safe_path: PathBuf,
-    pub safe_version: String,
-    pub safenode_path: PathBuf,
-    pub safenode_version: String,
-    pub safenode_manager_path: PathBuf,
-    pub safenode_manager_version: String,
+    pub safe_path: Option<PathBuf>,
+    #[serde(
+        serialize_with = "serialize_version",
+        deserialize_with = "deserialize_version"
+    )]
+    pub safe_version: Option<Version>,
+    pub safenode_path: Option<PathBuf>,
+    #[serde(
+        serialize_with = "serialize_version",
+        deserialize_with = "deserialize_version"
+    )]
+    pub safenode_version: Option<Version>,
+    pub safenode_manager_path: Option<PathBuf>,
+    #[serde(
+        serialize_with = "serialize_version",
+        deserialize_with = "deserialize_version"
+    )]
+    pub safenode_manager_version: Option<Version>,
+}
+
+fn serialize_version<S>(version: &Option<Version>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match version {
+        Some(v) => serializer.serialize_some(&v.to_string()),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn deserialize_version<'de, D>(deserializer: D) -> Result<Option<Version>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserializer.deserialize_option(VersionOptionVisitor)
+}
+
+struct VersionOptionVisitor;
+
+impl<'de> Visitor<'de> for VersionOptionVisitor {
+    type Value = Option<Version>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("an option of a string representing a semver version")
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(None)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_str(VersionVisitor).map(Some)
+    }
+}
+
+struct VersionVisitor;
+
+impl<'de> Visitor<'de> for VersionVisitor {
+    type Value = Version;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a string representing a semver version")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Version, E>
+    where
+        E: serde::de::Error,
+    {
+        value.parse().map_err(serde::de::Error::custom)
+    }
 }
 
 impl Settings {
@@ -92,47 +166,54 @@ impl Settings {
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
             serde_json::from_str(&contents).unwrap_or_else(|_| Settings {
-                safe_path: PathBuf::new(),
-                safe_version: String::new(),
-                safenode_path: PathBuf::new(),
-                safenode_version: String::new(),
-                safenode_manager_path: PathBuf::new(),
-                safenode_manager_version: String::new(),
+                safe_path: None,
+                safe_version: None,
+                safenode_path: None,
+                safenode_version: None,
+                safenode_manager_path: None,
+                safenode_manager_version: None,
             })
         } else {
             Settings {
-                safe_path: PathBuf::new(),
-                safe_version: String::new(),
-                safenode_path: PathBuf::new(),
-                safenode_version: String::new(),
-                safenode_manager_path: PathBuf::new(),
-                safenode_manager_version: String::new(),
+                safe_path: None,
+                safe_version: None,
+                safenode_path: None,
+                safenode_version: None,
+                safenode_manager_path: None,
+                safenode_manager_version: None,
             }
         };
         Ok(settings)
     }
 
-    pub fn get_installed_version(&self, asset_type: &AssetType) -> String {
+    pub fn get_install_details(&self, asset_type: &AssetType) -> Option<(PathBuf, Version)> {
+        // In each of these cases, if either the path or the version is set, both of them have to
+        // be set, so the unwrap seems justified. If only one of them is set, that's a bug.
         match asset_type {
-            AssetType::Client => self.safe_version.clone(),
-            AssetType::Node => self.safenode_version.clone(),
-            AssetType::NodeManager => self.safenode_manager_version.clone(),
-        }
-    }
-
-    pub fn is_installed(&self, asset_type: &AssetType) -> bool {
-        match asset_type {
-            AssetType::Client => !self.safe_version.is_empty(),
-            AssetType::Node => !self.safenode_version.is_empty(),
-            AssetType::NodeManager => !self.safenode_manager_version.is_empty(),
-        }
-    }
-
-    pub fn get_install_path(&self, asset_type: &AssetType) -> PathBuf {
-        match asset_type {
-            AssetType::Client => self.safe_path.clone(),
-            AssetType::Node => self.safenode_path.clone(),
-            AssetType::NodeManager => self.safenode_manager_path.clone(),
+            AssetType::Client => {
+                if self.safe_path.is_some() {
+                    let path = self.safe_path.as_ref().unwrap();
+                    let version = self.safe_version.as_ref().unwrap();
+                    return Some((path.clone(), version.clone()));
+                }
+                None
+            }
+            AssetType::Node => {
+                if self.safenode_path.is_some() {
+                    let path = self.safenode_path.as_ref().unwrap();
+                    let version = self.safenode_version.as_ref().unwrap();
+                    return Some((path.clone(), version.clone()));
+                }
+                None
+            }
+            AssetType::NodeManager => {
+                if self.safenode_manager_path.is_some() {
+                    let path = self.safenode_manager_path.as_ref().unwrap();
+                    let version = self.safenode_manager_version.as_ref().unwrap();
+                    return Some((path.clone(), version.clone()));
+                }
+                None
+            }
         }
     }
 
@@ -204,11 +285,11 @@ pub fn check_prerequisites() -> Result<()> {
 /// A tuple of the version number and full path of the installed binary.
 pub async fn install_bin(
     asset_type: AssetType,
-    release_repo: Box<dyn SafeReleaseRepositoryInterface>,
+    release_repo: Box<dyn SafeReleaseRepoActions>,
     platform: &str,
     dest_dir_path: PathBuf,
-    version: Option<String>,
-) -> Result<(String, PathBuf)> {
+    version: Option<Version>,
+) -> Result<(Version, PathBuf)> {
     let bin_name = get_bin_name(&asset_type);
     println!(
         "Installing {bin_name} for {platform} at {}...",
@@ -368,9 +449,10 @@ mod test {
     use mockall::mock;
     use mockall::predicate::*;
     use mockall::Sequence;
+    use semver::Version;
     use sn_releases::{
         ArchiveType, Platform, ProgressCallback, ReleaseType, Result as SnReleaseResult,
-        SafeReleaseRepositoryInterface,
+        SafeReleaseRepoActions,
     };
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
@@ -383,10 +465,6 @@ mod test {
     #[cfg(windows)]
     const SAFE_BIN_NAME: &str = "safe.exe";
     #[cfg(unix)]
-    const SAFENODE_BIN_NAME: &str = "safenode";
-    #[cfg(windows)]
-    const SAFENODE_BIN_NAME: &str = "safenode.exe";
-    #[cfg(unix)]
     const PLATFORM: &str = "x86_64-unknown-linux-musl";
     #[cfg(windows)]
     const PLATFORM: &str = "x86_64-pc-windows-msvc";
@@ -394,12 +472,12 @@ mod test {
     mock! {
         pub SafeReleaseRepository {}
         #[async_trait]
-        impl SafeReleaseRepositoryInterface for SafeReleaseRepository {
-            async fn get_latest_version(&self, release_type: &ReleaseType) -> SnReleaseResult<String>;
+        impl SafeReleaseRepoActions for SafeReleaseRepository {
+            async fn get_latest_version(&self, release_type: &ReleaseType) -> SnReleaseResult<Version>;
             async fn download_release_from_s3(
                 &self,
                 release_type: &ReleaseType,
-                version: &str,
+                version: &Version,
                 platform: &Platform,
                 archive_type: &ArchiveType,
                 download_dir: &Path,
@@ -417,7 +495,9 @@ mod test {
 
     #[tokio::test]
     async fn install_bin_should_install_the_latest_version() -> Result<()> {
-        let latest_version = "0.86.55";
+        let latest_version = Version::new(0, 86, 55);
+        let latest_version_clone1 = latest_version.clone();
+        let latest_version_clone2 = latest_version.clone();
         let temp_dir = assert_fs::TempDir::new()?;
 
         let install_dir = temp_dir.child("install");
@@ -431,14 +511,14 @@ mod test {
         mock_release_repo
             .expect_get_latest_version()
             .times(1)
-            .returning(|_| Ok(latest_version.to_string()))
+            .returning(move |_| Ok(latest_version_clone1.clone()))
             .in_sequence(&mut seq);
 
         mock_release_repo
             .expect_download_release_from_s3()
             .with(
                 eq(&ReleaseType::Safe),
-                eq(latest_version),
+                eq(latest_version.clone()),
                 always(), // Varies per platform
                 eq(&ArchiveType::TarGz),
                 always(), // Temporary directory which doesn't really matter
@@ -448,7 +528,7 @@ mod test {
             .returning(move |_, _, _, _, _, _| {
                 Ok(PathBuf::from(format!(
                     "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
-                    latest_version
+                    latest_version_clone2
                 )))
             })
             .in_sequence(&mut seq);
@@ -460,7 +540,7 @@ mod test {
             .with(
                 eq(PathBuf::from(format!(
                     "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
-                    latest_version
+                    latest_version.clone()
                 ))),
                 always(), // We will extract to a temporary directory
             )
@@ -477,7 +557,7 @@ mod test {
         )
         .await?;
 
-        assert_eq!(version, "0.86.55");
+        assert_eq!(version, Version::new(0, 86, 55));
         assert_eq!(bin_path, installed_safe.to_path_buf());
 
         #[cfg(unix)]
@@ -495,7 +575,9 @@ mod test {
     #[tokio::test]
     async fn install_bin_when_parent_dirs_in_dest_path_do_not_exist_should_install_the_latest_version(
     ) -> Result<()> {
-        let latest_version = "0.86.55";
+        let latest_version = Version::new(0, 86, 55);
+        let latest_version_clone1 = latest_version.clone();
+        let latest_version_clone2 = latest_version.clone();
         let temp_dir = assert_fs::TempDir::new()?;
 
         let install_dir = temp_dir.child("install/using/many/paths");
@@ -509,14 +591,14 @@ mod test {
         mock_release_repo
             .expect_get_latest_version()
             .times(1)
-            .returning(|_| Ok(latest_version.to_string()))
+            .returning(move |_| Ok(latest_version_clone1.clone()))
             .in_sequence(&mut seq);
 
         mock_release_repo
             .expect_download_release_from_s3()
             .with(
                 eq(&ReleaseType::Safe),
-                eq(latest_version),
+                eq(latest_version.clone()),
                 always(), // Varies per platform
                 eq(&ArchiveType::TarGz),
                 always(), // Temporary directory which doesn't really matter
@@ -526,7 +608,7 @@ mod test {
             .returning(move |_, _, _, _, _, _| {
                 Ok(PathBuf::from(format!(
                     "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
-                    latest_version
+                    latest_version_clone2
                 )))
             })
             .in_sequence(&mut seq);
@@ -555,7 +637,7 @@ mod test {
         )
         .await?;
 
-        assert_eq!(version, "0.86.55");
+        assert_eq!(version, Version::new(0, 86, 55));
         assert_eq!(bin_path, installed_safe.to_path_buf());
 
         Ok(())
@@ -563,7 +645,8 @@ mod test {
 
     #[tokio::test]
     async fn install_bin_should_install_a_specific_version() -> Result<()> {
-        let specific_version = "0.85.0";
+        let specific_version = Version::new(0, 85, 0);
+        let specific_version_clone = specific_version.clone();
         let temp_dir = assert_fs::TempDir::new()?;
 
         let install_dir = temp_dir.child("install");
@@ -578,7 +661,7 @@ mod test {
             .expect_download_release_from_s3()
             .with(
                 eq(&ReleaseType::Safe),
-                eq(specific_version),
+                eq(specific_version.clone()),
                 always(), // Varies per platform
                 eq(&ArchiveType::TarGz),
                 always(), // Temporary directory which doesn't really matter
@@ -588,7 +671,7 @@ mod test {
             .returning(move |_, _, _, _, _, _| {
                 Ok(PathBuf::from(format!(
                     "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
-                    specific_version
+                    specific_version_clone
                 )))
             })
             .in_sequence(&mut seq);
@@ -600,7 +683,7 @@ mod test {
             .with(
                 eq(PathBuf::from(format!(
                     "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
-                    specific_version
+                    specific_version.clone()
                 ))),
                 always(), // We will extract to a temporary directory
             )
@@ -613,7 +696,7 @@ mod test {
             Box::new(mock_release_repo),
             PLATFORM,
             install_dir.path().to_path_buf(),
-            Some(specific_version.to_string()),
+            Some(specific_version.clone()),
         )
         .await?;
 
@@ -709,27 +792,33 @@ mod test {
         testnet_bin_file.write_binary(b"fake testnet code")?;
 
         let settings = Settings {
-            safe_path: safe_bin_file.to_path_buf(),
-            safe_version: "v0.75.1".to_string(),
-            safenode_path: safenode_bin_file.to_path_buf(),
-            safenode_version: "v0.75.2".to_string(),
-            safenode_manager_path: safenode_manager_bin_file.to_path_buf(),
-            safenode_manager_version: "v0.1.8".to_string(),
+            safe_path: Some(safe_bin_file.to_path_buf()),
+            safe_version: Some(Version::new(0, 75, 1)),
+            safenode_path: Some(safenode_bin_file.to_path_buf()),
+            safenode_version: Some(Version::new(0, 75, 2)),
+            safenode_manager_path: Some(safenode_manager_bin_file.to_path_buf()),
+            safenode_manager_version: Some(Version::new(0, 1, 8)),
         };
 
         settings.save(&settings_file.to_path_buf())?;
 
         settings_file.assert(predicates::path::is_file());
         let settings = Settings::read(&settings_file.to_path_buf())?;
-        assert_eq!(settings.safe_path, safe_bin_file.to_path_buf());
-        assert_eq!(settings.safe_version, "v0.75.1");
-        assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
-        assert_eq!(settings.safenode_version, "v0.75.2");
+        assert_eq!(settings.safe_path, Some(safe_bin_file.to_path_buf()));
+        assert_eq!(settings.safe_version, Some(Version::new(0, 75, 1)));
+        assert_eq!(
+            settings.safenode_path,
+            Some(safenode_bin_file.to_path_buf())
+        );
+        assert_eq!(settings.safenode_version, Some(Version::new(0, 75, 2)));
         assert_eq!(
             settings.safenode_manager_path,
-            safenode_manager_bin_file.to_path_buf()
+            Some(safenode_manager_bin_file.to_path_buf())
         );
-        assert_eq!(settings.safenode_manager_version, "v0.1.8");
+        assert_eq!(
+            settings.safenode_manager_version,
+            Some(Version::new(0, 1, 8))
+        );
         Ok(())
     }
 
@@ -752,66 +841,33 @@ mod test {
         testnet_bin_file.write_binary(b"fake testnet code")?;
 
         let settings = Settings {
-            safe_path: safe_bin_file.to_path_buf(),
-            safe_version: "v0.75.1".to_string(),
-            safenode_path: safenode_bin_file.to_path_buf(),
-            safenode_version: "v0.75.2".to_string(),
-            safenode_manager_path: safenode_manager_bin_file.to_path_buf(),
-            safenode_manager_version: "v0.1.8".to_string(),
+            safe_path: Some(safe_bin_file.to_path_buf()),
+            safe_version: Some(Version::new(0, 75, 1)),
+            safenode_path: Some(safenode_bin_file.to_path_buf()),
+            safenode_version: Some(Version::new(0, 75, 2)),
+            safenode_manager_path: Some(safenode_manager_bin_file.to_path_buf()),
+            safenode_manager_version: Some(Version::new(0, 1, 8)),
         };
 
         settings.save(&settings_file.to_path_buf())?;
 
         settings_file.assert(predicates::path::is_file());
         let settings = Settings::read(&settings_file.to_path_buf())?;
-        assert_eq!(settings.safe_path, safe_bin_file.to_path_buf());
-        assert_eq!(settings.safe_version, "v0.75.1");
-        assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
-        assert_eq!(settings.safenode_version, "v0.75.2");
+        assert_eq!(settings.safe_path, Some(safe_bin_file.to_path_buf()));
+        assert_eq!(settings.safe_version, Some(Version::new(0, 75, 1)));
+        assert_eq!(
+            settings.safenode_path,
+            Some(safenode_bin_file.to_path_buf())
+        );
+        assert_eq!(settings.safenode_version, Some(Version::new(0, 75, 2)));
         assert_eq!(
             settings.safenode_manager_path,
-            safenode_manager_bin_file.to_path_buf()
+            Some(safenode_manager_bin_file.to_path_buf())
         );
-        assert_eq!(settings.safenode_manager_version, "v0.1.8");
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn save_should_write_updated_settings() -> Result<()> {
-        let tmp_data_path = assert_fs::TempDir::new()?;
-        let settings_file = tmp_data_path.child("safeup.json");
-        settings_file.write_str(
-            r#"
-        {
-          "safe_path": "/home/chris/.local/safe",
-          "safe_version": "v0.75.1",
-          "safenode_path": "/home/chris/.local/bin/safenode",
-          "safenode_version": "v0.75.2",
-          "safenode_manager_path": "/home/chris/.local/bin/safenode-manager",
-          "safenode_manager_version": "v0.1.8"
-        }
-        "#,
-        )?;
-
-        let safenode_bin_file = tmp_data_path.child(SAFENODE_BIN_NAME);
-        safenode_bin_file.write_binary(b"fake safenode code")?;
-
-        let mut settings = Settings::read(&settings_file.to_path_buf())?;
-        settings.safenode_path = safenode_bin_file.to_path_buf();
-
-        settings.save(&settings_file.to_path_buf())?;
-
-        settings_file.assert(predicates::path::is_file());
-        let settings = Settings::read(&settings_file.to_path_buf())?;
-        assert_eq!(settings.safe_path, PathBuf::from("/home/chris/.local/safe"));
-        assert_eq!(settings.safe_version, "v0.75.1");
-        assert_eq!(settings.safenode_path, safenode_bin_file.to_path_buf());
-        assert_eq!(settings.safenode_version, "v0.75.2");
         assert_eq!(
-            settings.safenode_manager_path,
-            PathBuf::from("/home/chris/.local/bin/safenode-manager")
+            settings.safenode_manager_version,
+            Some(Version::new(0, 1, 8))
         );
-        assert_eq!(settings.safenode_manager_version, "v0.1.8");
         Ok(())
     }
 }
