@@ -53,6 +53,7 @@ const SET_PATH_FILE_CONTENT: &str = indoc! {r#"
 pub enum AssetType {
     Client,
     Node,
+    NodeLaunchpad,
     NodeManager,
 }
 
@@ -65,6 +66,7 @@ impl AssetType {
         match self {
             AssetType::Client => ReleaseType::Safe,
             AssetType::Node => ReleaseType::Safenode,
+            AssetType::NodeLaunchpad => ReleaseType::NodeLaunchpad,
             AssetType::NodeManager => ReleaseType::SafenodeManager,
         }
     }
@@ -75,6 +77,7 @@ impl std::fmt::Display for AssetType {
         match *self {
             AssetType::Client => write!(f, "safe"),
             AssetType::Node => write!(f, "safenode"),
+            AssetType::NodeLaunchpad => write!(f, "node-launchpad"),
             AssetType::NodeManager => write!(f, "safenode-manager"),
         }
     }
@@ -82,6 +85,12 @@ impl std::fmt::Display for AssetType {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
+    pub node_launchpad_path: Option<PathBuf>,
+    #[serde(
+        serialize_with = "serialize_version",
+        deserialize_with = "deserialize_version"
+    )]
+    pub node_launchpad_version: Option<Version>,
     pub safe_path: Option<PathBuf>,
     #[serde(
         serialize_with = "serialize_version",
@@ -166,6 +175,8 @@ impl Settings {
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
             serde_json::from_str(&contents).unwrap_or_else(|_| Settings {
+                node_launchpad_path: None,
+                node_launchpad_version: None,
                 safe_path: None,
                 safe_version: None,
                 safenode_path: None,
@@ -175,6 +186,8 @@ impl Settings {
             })
         } else {
             Settings {
+                node_launchpad_path: None,
+                node_launchpad_version: None,
                 safe_path: None,
                 safe_version: None,
                 safenode_path: None,
@@ -202,6 +215,14 @@ impl Settings {
                 if self.safenode_path.is_some() {
                     let path = self.safenode_path.as_ref().unwrap();
                     let version = self.safenode_version.as_ref().unwrap();
+                    return Some((path.clone(), version.clone()));
+                }
+                None
+            }
+            AssetType::NodeLaunchpad => {
+                if self.node_launchpad_path.is_some() {
+                    let path = self.node_launchpad_path.as_ref().unwrap();
+                    let version = self.node_launchpad_version.as_ref().unwrap();
                     return Some((path.clone(), version.clone()));
                 }
                 None
@@ -422,6 +443,7 @@ fn get_bin_name(asset_type: &AssetType) -> String {
     let mut bin_name = match asset_type {
         AssetType::Client => "safe".to_string(),
         AssetType::Node => "safenode".to_string(),
+        AssetType::NodeLaunchpad => "node-launchpad".to_string(),
         AssetType::NodeManager => "safenode-manager".to_string(),
     };
     if OS == "windows" {
@@ -788,10 +810,12 @@ mod test {
         safenode_bin_file.write_binary(b"fake safenode code")?;
         let safenode_manager_bin_file = tmp_data_path.child("safenode-manager");
         safenode_manager_bin_file.write_binary(b"fake safenode-manager code")?;
-        let testnet_bin_file = tmp_data_path.child("testnet");
-        testnet_bin_file.write_binary(b"fake testnet code")?;
+        let node_launchpad_bin_file = tmp_data_path.child("node-launchpad");
+        node_launchpad_bin_file.write_binary(b"fake launchpad code")?;
 
         let settings = Settings {
+            node_launchpad_path: Some(node_launchpad_bin_file.to_path_buf()),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: Some(safe_bin_file.to_path_buf()),
             safe_version: Some(Version::new(0, 75, 1)),
             safenode_path: Some(safenode_bin_file.to_path_buf()),
@@ -804,6 +828,11 @@ mod test {
 
         settings_file.assert(predicates::path::is_file());
         let settings = Settings::read(&settings_file.to_path_buf())?;
+        assert_eq!(
+            settings.node_launchpad_path,
+            Some(node_launchpad_bin_file.to_path_buf())
+        );
+        assert_eq!(settings.node_launchpad_version, Some(Version::new(0, 2, 0)));
         assert_eq!(settings.safe_path, Some(safe_bin_file.to_path_buf()));
         assert_eq!(settings.safe_version, Some(Version::new(0, 75, 1)));
         assert_eq!(
@@ -837,10 +866,12 @@ mod test {
         safenode_bin_file.write_binary(b"fake safenode code")?;
         let safenode_manager_bin_file = tmp_data_path.child("safenode-manager");
         safenode_manager_bin_file.write_binary(b"fake safenode-manager code")?;
-        let testnet_bin_file = tmp_data_path.child("testnet");
-        testnet_bin_file.write_binary(b"fake testnet code")?;
+        let node_launchpad_bin_file = tmp_data_path.child("node-launchpad");
+        node_launchpad_bin_file.write_binary(b"fake launchpad code")?;
 
         let settings = Settings {
+            node_launchpad_path: Some(node_launchpad_bin_file.to_path_buf()),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: Some(safe_bin_file.to_path_buf()),
             safe_version: Some(Version::new(0, 75, 1)),
             safenode_path: Some(safenode_bin_file.to_path_buf()),

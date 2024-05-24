@@ -13,6 +13,7 @@ env:
   CLIENT_VERSION: 0.77.27
   NODE_VERSION: 0.83.25
   NODE_MANAGER_VERSION: 0.1.8
+  NODE_LAUNCHPAD_VERSION: 0.2.0
 
 jobs:
   # The code in this crate uses lots of conditional compilation for cross-platform capabilities.
@@ -141,6 +142,7 @@ jobs:
           cargo run -- client --version $env:CLIENT_VERSION
           cargo run -- node --version $env:NODE_VERSION
           cargo run -- node-manager --version $env:NODE_MANAGER_VERSION
+          cargo run -- node-launchpad --version $env:NODE_LAUNCHPAD_VERSION
       - name: Check if binaries are available in new shell session
         shell: pwsh
         run: |
@@ -154,6 +156,10 @@ jobs:
           }
           if (!(Test-Path "$env:USERPROFILE\safe\safenode-manager.exe")) {
             Write-Host "safenode-manager.exe does not exist"
+            exit 1
+          }
+          if (!(Test-Path "$env:USERPROFILE\safe\node-launchpad.exe")) {
+            Write-Host "node-launchpad.exe does not exist"
             exit 1
           }
 
@@ -197,6 +203,18 @@ jobs:
             exit 1
           }
 
+          $output = & "${env:USERPROFILE}\safe\node-launchpad.exe" --version
+          $version = $output | Select-String -Pattern "node-launchpad (\d+\.\d+\.\d+)"
+          $versionNumber = $version.Matches.Groups[1].Value
+          if ($versionNumber -eq "$env:NODE_LAUNCHPAD_VERSION") {
+            Write-Host "The correct version of safenode-manager has been installed"
+          } else {
+            Write-Host "The correct version of safenode-manager has not been installed"
+            Write-Host "We expected version $env:NODE_LAUNCHPAD_VERSION"
+            Write-Host "The downloaded binary has $versionNumber"
+            exit 1
+          }
+
   test-install-linux:
     if: "!startsWith(github.event.pull_request.title, 'Automated version bump')"
     name: Install test (Linux)
@@ -214,6 +232,7 @@ jobs:
           cargo run -- client --version $CLIENT_VERSION
           cargo run -- node --version $NODE_VERSION
           cargo run -- node-manager --version $NODE_MANAGER_VERSION
+          cargo run -- node-launchpad --version $NODE_LAUNCHPAD_VERSION
       - name: Check if binaries are available in new shell session
         shell: bash
         run: |
@@ -229,6 +248,7 @@ jobs:
           [[ -f "$HOME/.local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode-manager" ]] || { echo "safenode-manager not in expected location"; exit 1; }
+          [[ -f "$HOME/.local/bin/node-launchpad" ]] || { echo "node-launchpad not in expected location"; exit 1; }
 
           version=$(safe --version | awk '{ print $2 }')
           if [[ "$version" == "$CLIENT_VERSION" ]]; then
@@ -256,6 +276,16 @@ jobs:
           else
             echo "The correct version of safenode-manager has not been installed"
             echo "We expected $NODE_MANAGER_VERSION"
+            echo "The downloaded binary has $version"
+            exit 1
+          fi
+
+          version=$(node-launchpad --version | awk '{ print $2 }')
+          if [[ "$version" == "$NODE_LAUNCHPAD_VERSION" ]]; then
+            echo "The correct version of node-launchpad has been installed"
+          else
+            echo "The correct version of node-launchpad has not been installed"
+            echo "We expected $NODE_LAUNCHPAD_VERSION"
             echo "The downloaded binary has $version"
             exit 1
           fi
@@ -276,6 +306,7 @@ jobs:
           cargo run -- client --version $CLIENT_VERSION
           cargo run -- node --version $NODE_VERSION
           cargo run -- node-manager --version $NODE_MANAGER_VERSION
+          cargo run -- node-launchpad --version $NODE_LAUNCHPAD_VERSION
       - name: Check if binaries are available in new shell session
         run: |
           # As with the Ubuntu test, we need to source the env file to get the binaries on PATH.
@@ -284,6 +315,7 @@ jobs:
           [[ -f "$HOME/.local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode-manager" ]] || { echo "safenode-manager not in expected location"; exit 1; }
+          [[ -f "$HOME/.local/bin/node-launchpad" ]] || { echo "node-launchpad not in expected location"; exit 1; }
 
           version=$(safe --version | awk '{ print $2 }')
           if [[ "$version" == "$CLIENT_VERSION" ]]; then
@@ -311,6 +343,16 @@ jobs:
           else
             echo "The correct version of safenode-manager has not been installed"
             echo "We expected $NODE_MANAGER_VERSION"
+            echo "The downloaded binary has $version"
+            exit 1
+          fi
+
+          version=$(node-launchpad --version | awk '{ print $2 }')
+          if [[ "$version" == "$NODE_LAUNCHPAD_VERSION" ]]; then
+            echo "The correct version of node-launchpad has been installed"
+          else
+            echo "The correct version of node-launchpad has not been installed"
+            echo "We expected $NODE_LAUNCHPAD_VERSION"
             echo "The downloaded binary has $version"
             exit 1
           fi

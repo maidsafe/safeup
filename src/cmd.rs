@@ -173,6 +173,10 @@ async fn do_install_binary(
             settings.safenode_path = Some(bin_path);
             settings.safenode_version = Some(installed_version);
         }
+        AssetType::NodeLaunchpad => {
+            settings.node_launchpad_path = Some(bin_path);
+            settings.node_launchpad_version = Some(installed_version);
+        }
         AssetType::NodeManager => {
             settings.safenode_manager_path = Some(bin_path);
             settings.safenode_manager_version = Some(installed_version);
