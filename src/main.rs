@@ -77,6 +77,30 @@ enum Commands {
         #[arg(short = 'v', long)]
         version: Option<String>,
     },
+    /// Install the node-launchpad binary.
+    ///
+    /// The location is platform specific:
+    /// - Linux/macOS: $HOME/.local/bin
+    /// - Windows: C:\Users\<username>\safe
+    ///
+    /// On Linux/macOS, the Bash shell profile will be modified to add $HOME/.local/bin to the PATH
+    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\safe.
+    #[clap(verbatim_doc_comment)]
+    NodeLaunchpad {
+        /// Override the default installation path.
+        ///
+        /// Any directories that don't exist will be created.
+        #[arg(short = 'p', long, value_name = "DIRECTORY")]
+        path: Option<PathBuf>,
+
+        /// Disable modification of the shell profile.
+        #[arg(short = 'n', long)]
+        no_modify_shell_profile: bool,
+
+        /// Install a specific version rather than the latest.
+        #[arg(short = 'v', long)]
+        version: Option<String>,
+    },
     /// Install the safenode-manager binary.
     ///
     /// The location is platform specific:
@@ -138,6 +162,25 @@ async fn main() -> Result<()> {
             println!("**************************************");
             install::check_prerequisites()?;
             process_install_cmd(AssetType::Node, path, version, no_modify_shell_profile).await
+        }
+        Some(Commands::NodeLaunchpad {
+            path,
+            no_modify_shell_profile,
+            version,
+        }) => {
+            println!("**************************************");
+            println!("*                                    *");
+            println!("*     Installing node-launchpad      *");
+            println!("*                                    *");
+            println!("**************************************");
+            install::check_prerequisites()?;
+            process_install_cmd(
+                AssetType::NodeLaunchpad,
+                path,
+                version,
+                no_modify_shell_profile,
+            )
+            .await
         }
         Some(Commands::NodeManager {
             path,

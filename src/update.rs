@@ -51,6 +51,8 @@ mod test {
     #[test]
     fn perform_upgrade_assessment_should_indicate_no_previous_installation() -> Result<()> {
         let settings = Settings {
+            node_launchpad_path: Some(PathBuf::from("/home/chris/.local/bin/node-launchpad")),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: None,
             safe_version: None,
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
@@ -63,6 +65,8 @@ mod test {
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
 
         let settings = Settings {
+            node_launchpad_path: Some(PathBuf::from("/home/chris/.local/bin/node-launchpad")),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
             safe_version: Some(Version::new(0, 78, 26)),
             safenode_path: None,
@@ -75,6 +79,8 @@ mod test {
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
 
         let settings = Settings {
+            node_launchpad_path: Some(PathBuf::from("/home/chris/.local/bin/node-launchpad")),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
             safe_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
@@ -86,12 +92,31 @@ mod test {
             perform_update_assessment(&AssetType::NodeManager, &Version::new(0, 1, 8), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
 
+        let settings = Settings {
+            node_launchpad_path: None,
+            node_launchpad_version: None,
+            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
+            safe_version: Some(Version::new(0, 78, 26)),
+            safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
+            safenode_version: Some(Version::new(0, 83, 13)),
+            safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
+            safenode_manager_version: Some(Version::new(0, 1, 8)),
+        };
+        let decision = perform_update_assessment(
+            &AssetType::NodeLaunchpad,
+            &Version::new(0, 2, 0),
+            &settings,
+        )?;
+        assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
+
         Ok(())
     }
 
     #[test]
     fn perform_upgrade_assessment_should_indicate_we_are_at_latest_version() -> Result<()> {
         let settings = Settings {
+            node_launchpad_path: Some(PathBuf::from("/home/chris/.local/node-launchpad")),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
             safe_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
@@ -112,6 +137,13 @@ mod test {
             perform_update_assessment(&AssetType::NodeManager, &Version::new(0, 1, 8), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
 
+        let decision = perform_update_assessment(
+            &AssetType::NodeLaunchpad,
+            &Version::new(0, 2, 0),
+            &settings,
+        )?;
+        assert_matches!(decision, UpdateAssessmentResult::AtLatestVersion);
+
         Ok(())
     }
 
@@ -119,6 +151,8 @@ mod test {
     fn perform_upgrade_assessment_latest_version_is_less_than_current_should_return_error(
     ) -> Result<()> {
         let settings = Settings {
+            node_launchpad_path: Some(PathBuf::from("/home/chris/.local/node-launchpad")),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
             safe_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
@@ -157,6 +191,16 @@ mod test {
             ),
         }
 
+        let result =
+            perform_update_assessment(&AssetType::NodeLaunchpad, &Version::new(0, 1, 0), &settings);
+        match result {
+            Ok(_) => return Err(eyre!("this test should return an error")),
+            Err(e) => assert_eq!(
+                "The latest version is less than the current version of your binary.",
+                e.to_string()
+            ),
+        }
+
         Ok(())
     }
 
@@ -164,6 +208,8 @@ mod test {
     fn perform_upgrade_assessment_should_perform_update_when_latest_patch_version_is_greater(
     ) -> Result<()> {
         let settings = Settings {
+            node_launchpad_path: Some(PathBuf::from("/home/chris/.local/node-launchpad")),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
             safe_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
@@ -184,6 +230,13 @@ mod test {
             perform_update_assessment(&AssetType::NodeManager, &Version::new(0, 1, 8), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
+        let decision = perform_update_assessment(
+            &AssetType::NodeLaunchpad,
+            &Version::new(0, 2, 1),
+            &settings,
+        )?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
+
         Ok(())
     }
 
@@ -191,6 +244,8 @@ mod test {
     fn perform_upgrade_assessment_should_perform_update_when_latest_minor_version_is_greater(
     ) -> Result<()> {
         let settings = Settings {
+            node_launchpad_path: Some(PathBuf::from("/home/chris/.local/node-launchpad")),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
             safe_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
@@ -211,6 +266,13 @@ mod test {
             perform_update_assessment(&AssetType::NodeManager, &Version::new(0, 2, 0), &settings)?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
+        let decision = perform_update_assessment(
+            &AssetType::NodeLaunchpad,
+            &Version::new(0, 3, 0),
+            &settings,
+        )?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
+
         Ok(())
     }
 
@@ -218,6 +280,8 @@ mod test {
     fn perform_upgrade_assessment_should_perform_update_when_latest_major_version_is_greater(
     ) -> Result<()> {
         let settings = Settings {
+            node_launchpad_path: Some(PathBuf::from("/home/chris/.local/node-launchpad")),
+            node_launchpad_version: Some(Version::new(0, 2, 0)),
             safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
             safe_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
@@ -236,6 +300,13 @@ mod test {
 
         let decision =
             perform_update_assessment(&AssetType::NodeManager, &Version::new(1, 0, 0), &settings)?;
+        assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
+
+        let decision = perform_update_assessment(
+            &AssetType::NodeLaunchpad,
+            &Version::new(1, 0, 0),
+            &settings,
+        )?;
         assert_matches!(decision, UpdateAssessmentResult::PerformUpdate(_));
 
         Ok(())
