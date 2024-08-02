@@ -55,7 +55,13 @@ function detect_arch() {
         arch_triple="x86_64-unknown-$os-musl"
       fi
       ;;
-    aarch64*) arch_triple="aarch64-unknown-$os-musl" ;;
+    aarch64*)
+      if [[ $os == "mac" ]]; then
+        arch_triple="aarch64-apple-darwin"
+      else
+        arch_triple="aarch64-unknown-$os-musl"
+      fi
+      ;;
     arm64*)
       if [[ $os == "mac" ]]; then
         echo "Mac arm64 architecture not supported, installing x86_64 version"
