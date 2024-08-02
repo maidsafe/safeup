@@ -202,14 +202,10 @@ fn get_platform() -> Result<String> {
             }
             Ok(format!("{}-pc-{}-msvc", ARCH, OS))
         }
-        "macos" => {
-            if ARCH != "x86_64" {
-                println!(
-                    "We currently only have x86_64 binaries available for macOS. On Mx Macs, Rosetta will run these x86_64 binaries."
-                );
-            }
-            Ok(format!("{}-apple-darwin", ARCH))
-        }
+        "macos" => match ARCH {
+            "x86_64" | "aarch64" => Ok(format!("{}-apple-darwin", ARCH)),
+            _ => Err(eyre!("We currently do not have binaries for the {OS}/{ARCH} combination")),
+        },
         &_ => Err(eyre!("{OS} is not currently supported by safeup")),
     }
 }
