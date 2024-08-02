@@ -204,7 +204,9 @@ fn get_platform() -> Result<String> {
         }
         "macos" => match ARCH {
             "x86_64" | "aarch64" => Ok(format!("{}-apple-darwin", ARCH)),
-            _ => Err(eyre!("We currently do not have binaries for the {OS}/{ARCH} combination")),
+            _ => Err(eyre!(
+                "We currently do not have binaries for the {OS}/{ARCH} combination"
+            )),
         },
         &_ => Err(eyre!("{OS} is not currently supported by safeup")),
     }
