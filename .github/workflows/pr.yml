@@ -12,7 +12,7 @@ env:
   RUSTFLAGS: "-D warnings"
   CLIENT_VERSION: 0.94.0
   NODE_VERSION: 0.110.0
-  NODE_MANAGER_VERSION: 0.1.8
+  NODE_MANAGER_VERSION: 0.10.1
 
 jobs:
   # The code in this crate uses lots of conditional compilation for cross-platform capabilities.
