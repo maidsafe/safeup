@@ -489,6 +489,7 @@ mod test {
                 dest_dir_path: &Path,
                 callback: &ProgressCallback,
             ) -> SnReleaseResult<PathBuf>;
+            async fn download_winsw(&self, dest_path: &Path, callback: &ProgressCallback) -> SnReleaseResult<()>;
             fn extract_release_archive(&self, archive_path: &Path, extract_dir: &Path) -> SnReleaseResult<PathBuf>;
         }
     }
