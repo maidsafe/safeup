@@ -18,19 +18,19 @@ $downloadUrl = $asset.browser_download_url
 $archivePath = Join-Path $env:TEMP "safeup.zip"
 Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath
 
-$safePath = Join-Path $env:USERPROFILE "safe"
-New-Item -ItemType Directory -Force -Path $safePath
-Expand-Archive -Path $archivePath -DestinationPath $safePath -Force
+$autonomiPath = Join-Path $env:USERPROFILE "autonomi"
+New-Item -ItemType Directory -Force -Path $autonomiPath
+Expand-Archive -Path $archivePath -DestinationPath $autonomiPath -Force
 Remove-Item $archivePath
-$safeupExePath = Join-Path $safePath "safeup.exe"
+$safeupExePath = Join-Path $autonomiPath "safeup.exe"
 
 $currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::User)
-if ($currentPath -notlike "*$safePath*") {
-    $newPath = $currentPath + ";" + $safePath
+if ($currentPath -notlike "*$autonomiPath*") {
+    $newPath = $currentPath + ";" + $autonomiPath
     [Environment]::SetEnvironmentVariable("PATH", $newPath, [EnvironmentVariableTarget]::User)
-    Write-Host "Added $safePath to user PATH"
+    Write-Host "Added $autonomiPath to user PATH"
 } else {
-    Write-Host "Path $safePath is already in user PATH"
+    Write-Host "Path $autonomiPath is already in user PATH"
 }
 
 Write-Host "You may need to start a new session for safeup to become available."
