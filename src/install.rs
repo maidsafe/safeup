@@ -63,7 +63,7 @@ impl AssetType {
 
     pub fn get_release_type(&self) -> ReleaseType {
         match self {
-            AssetType::Client => ReleaseType::Safe,
+            AssetType::Client => ReleaseType::Autonomi,
             AssetType::Node => ReleaseType::Safenode,
             AssetType::NodeManager => ReleaseType::SafenodeManager,
         }
@@ -73,7 +73,7 @@ impl AssetType {
 impl std::fmt::Display for AssetType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match *self {
-            AssetType::Client => write!(f, "safe"),
+            AssetType::Client => write!(f, "autonomi"),
             AssetType::Node => write!(f, "safenode"),
             AssetType::NodeManager => write!(f, "safenode-manager"),
         }
@@ -82,12 +82,12 @@ impl std::fmt::Display for AssetType {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
-    pub safe_path: Option<PathBuf>,
+    pub autonomi_path: Option<PathBuf>,
     #[serde(
         serialize_with = "serialize_version",
         deserialize_with = "deserialize_version"
     )]
-    pub safe_version: Option<Version>,
+    pub autonomi_version: Option<Version>,
     pub safenode_path: Option<PathBuf>,
     #[serde(
         serialize_with = "serialize_version",
@@ -166,8 +166,8 @@ impl Settings {
             let mut contents = String::new();
             file.read_to_string(&mut contents)?;
             serde_json::from_str(&contents).unwrap_or_else(|_| Settings {
-                safe_path: None,
-                safe_version: None,
+                autonomi_path: None,
+                autonomi_version: None,
                 safenode_path: None,
                 safenode_version: None,
                 safenode_manager_path: None,
@@ -175,8 +175,8 @@ impl Settings {
             })
         } else {
             Settings {
-                safe_path: None,
-                safe_version: None,
+                autonomi_path: None,
+                autonomi_version: None,
                 safenode_path: None,
                 safenode_version: None,
                 safenode_manager_path: None,
@@ -187,13 +187,11 @@ impl Settings {
     }
 
     pub fn get_install_details(&self, asset_type: &AssetType) -> Option<(PathBuf, Version)> {
-        // In each of these cases, if either the path or the version is set, both of them have to
-        // be set, so the unwrap seems justified. If only one of them is set, that's a bug.
         match asset_type {
             AssetType::Client => {
-                if self.safe_path.is_some() {
-                    let path = self.safe_path.as_ref().unwrap();
-                    let version = self.safe_version.as_ref().unwrap();
+                if self.autonomi_path.is_some() {
+                    let path = self.autonomi_path.as_ref().unwrap();
+                    let version = self.autonomi_version.as_ref().unwrap();
                     return Some((path.clone(), version.clone()));
                 }
                 None
@@ -420,7 +418,7 @@ pub async fn configure_shell_profile(
 
 fn get_bin_name(asset_type: &AssetType) -> String {
     let mut bin_name = match asset_type {
-        AssetType::Client => "safe".to_string(),
+        AssetType::Client => "autonomi".to_string(),
         AssetType::Node => "safenode".to_string(),
         AssetType::NodeManager => "safenode-manager".to_string(),
     };
@@ -461,9 +459,9 @@ mod test {
     /// These may seem pointless, but they are useful for when the tests run on different
     /// platforms.
     #[cfg(unix)]
-    const SAFE_BIN_NAME: &str = "safe";
+    const AUTONOMI_BIN_NAME: &str = "autonomi";
     #[cfg(windows)]
-    const SAFE_BIN_NAME: &str = "safe.exe";
+    const AUTONOMI_BIN_NAME: &str = "autonomi.exe";
     #[cfg(unix)]
     const PLATFORM: &str = "x86_64-unknown-linux-musl";
     #[cfg(windows)]
@@ -502,10 +500,10 @@ mod test {
         let temp_dir = assert_fs::TempDir::new()?;
 
         let install_dir = temp_dir.child("install");
-        let installed_safe = install_dir.child("safe");
+        let installed_autonomi = install_dir.child("autonomi");
         // By creating this file we are 'pretending' that it was extracted to the specified
         // location. It's done so we can assert that the file is made executable.
-        installed_safe.write_binary(b"fake safe bin")?;
+        installed_autonomi.write_binary(b"fake autonomi bin")?;
 
         let mut mock_release_repo = MockSafeReleaseRepository::new();
         let mut seq = Sequence::new();
@@ -518,7 +516,7 @@ mod test {
         mock_release_repo
             .expect_download_release_from_s3()
             .with(
-                eq(&ReleaseType::Safe),
+                eq(&ReleaseType::Autonomi),
                 eq(latest_version.clone()),
                 always(), // Varies per platform
                 eq(&ArchiveType::TarGz),
@@ -528,19 +526,19 @@ mod test {
             .times(1)
             .returning(move |_, _, _, _, _, _| {
                 Ok(PathBuf::from(format!(
-                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    "/tmp/autonomi-{}-x86_64-unknown-linux-musl.tar.gz",
                     latest_version_clone2
                 )))
             })
             .in_sequence(&mut seq);
 
         let mut install_dir_path_clone = install_dir.to_path_buf().clone();
-        install_dir_path_clone.push("safe");
+        install_dir_path_clone.push("autonomi");
         mock_release_repo
             .expect_extract_release_archive()
             .with(
                 eq(PathBuf::from(format!(
-                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    "/tmp/autonomi-{}-x86_64-unknown-linux-musl.tar.gz",
                     latest_version.clone()
                 ))),
                 always(), // We will extract to a temporary directory
@@ -559,13 +557,13 @@ mod test {
         .await?;
 
         assert_eq!(version, Version::new(0, 86, 55));
-        assert_eq!(bin_path, installed_safe.to_path_buf());
+        assert_eq!(bin_path, installed_autonomi.to_path_buf());
 
         #[cfg(unix)]
         {
-            let extracted_safe_metadata = std::fs::metadata(installed_safe.path())?;
+            let extracted_autonomi_metadata = std::fs::metadata(installed_autonomi.path())?;
             assert_eq!(
-                (extracted_safe_metadata.permissions().mode() & 0o777),
+                (extracted_autonomi_metadata.permissions().mode() & 0o777),
                 0o755
             );
         }
@@ -582,10 +580,10 @@ mod test {
         let temp_dir = assert_fs::TempDir::new()?;
 
         let install_dir = temp_dir.child("install/using/many/paths");
-        let installed_safe = install_dir.child("safe");
+        let installed_autonomi = install_dir.child("autonomi");
         // By creating this file we are 'pretending' that it was extracted to the specified
         // location. It's done so we can assert that the file is made executable.
-        installed_safe.write_binary(b"fake safe bin")?;
+        installed_autonomi.write_binary(b"fake autonomi bin")?;
 
         let mut mock_release_repo = MockSafeReleaseRepository::new();
         let mut seq = Sequence::new();
@@ -598,7 +596,7 @@ mod test {
         mock_release_repo
             .expect_download_release_from_s3()
             .with(
-                eq(&ReleaseType::Safe),
+                eq(&ReleaseType::Autonomi),
                 eq(latest_version.clone()),
                 always(), // Varies per platform
                 eq(&ArchiveType::TarGz),
@@ -608,19 +606,19 @@ mod test {
             .times(1)
             .returning(move |_, _, _, _, _, _| {
                 Ok(PathBuf::from(format!(
-                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    "/tmp/autonomi-{}-x86_64-unknown-linux-musl.tar.gz",
                     latest_version_clone2
                 )))
             })
             .in_sequence(&mut seq);
 
         let mut install_dir_path_clone = install_dir.to_path_buf().clone();
-        install_dir_path_clone.push("safe");
+        install_dir_path_clone.push("autonomi");
         mock_release_repo
             .expect_extract_release_archive()
             .with(
                 eq(PathBuf::from(format!(
-                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    "/tmp/autonomi-{}-x86_64-unknown-linux-musl.tar.gz",
                     latest_version
                 ))),
                 always(), // We will extract to a temporary directory
@@ -639,7 +637,7 @@ mod test {
         .await?;
 
         assert_eq!(version, Version::new(0, 86, 55));
-        assert_eq!(bin_path, installed_safe.to_path_buf());
+        assert_eq!(bin_path, installed_autonomi.to_path_buf());
 
         Ok(())
     }
@@ -651,17 +649,17 @@ mod test {
         let temp_dir = assert_fs::TempDir::new()?;
 
         let install_dir = temp_dir.child("install");
-        let installed_safe = install_dir.child("safe");
+        let installed_autonomi = install_dir.child("autonomi");
         // By creating this file we are 'pretending' that it was extracted to the specified
         // location. It's done so we can assert that the file is made executable.
-        installed_safe.write_binary(b"fake safe bin")?;
+        installed_autonomi.write_binary(b"fake autonomi bin")?;
 
         let mut mock_release_repo = MockSafeReleaseRepository::new();
         let mut seq = Sequence::new();
         mock_release_repo
             .expect_download_release_from_s3()
             .with(
-                eq(&ReleaseType::Safe),
+                eq(&ReleaseType::Autonomi),
                 eq(specific_version.clone()),
                 always(), // Varies per platform
                 eq(&ArchiveType::TarGz),
@@ -671,19 +669,19 @@ mod test {
             .times(1)
             .returning(move |_, _, _, _, _, _| {
                 Ok(PathBuf::from(format!(
-                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    "/tmp/autonomi-{}-x86_64-unknown-linux-musl.tar.gz",
                     specific_version_clone
                 )))
             })
             .in_sequence(&mut seq);
 
         let mut install_dir_path_clone = install_dir.to_path_buf().clone();
-        install_dir_path_clone.push("safe");
+        install_dir_path_clone.push("autonomi");
         mock_release_repo
             .expect_extract_release_archive()
             .with(
                 eq(PathBuf::from(format!(
-                    "/tmp/safe-{}-x86_64-unknown-linux-musl.tar.gz",
+                    "/tmp/autonomi-{}-x86_64-unknown-linux-musl.tar.gz",
                     specific_version.clone()
                 ))),
                 always(), // We will extract to a temporary directory
@@ -702,7 +700,7 @@ mod test {
         .await?;
 
         assert_eq!(version, specific_version);
-        assert_eq!(bin_path, installed_safe.to_path_buf());
+        assert_eq!(bin_path, installed_autonomi.to_path_buf());
 
         Ok(())
     }
@@ -783,7 +781,7 @@ mod test {
     async fn save_should_write_new_settings_when_settings_file_does_not_exist() -> Result<()> {
         let tmp_data_path = assert_fs::TempDir::new()?;
         let settings_file = tmp_data_path.child("safeup.json");
-        let safe_bin_file = tmp_data_path.child(SAFE_BIN_NAME);
+        let safe_bin_file = tmp_data_path.child(AUTONOMI_BIN_NAME);
         safe_bin_file.write_binary(b"fake safe code")?;
         let safenode_bin_file = tmp_data_path.child("safenode");
         safenode_bin_file.write_binary(b"fake safenode code")?;
@@ -793,8 +791,8 @@ mod test {
         testnet_bin_file.write_binary(b"fake testnet code")?;
 
         let settings = Settings {
-            safe_path: Some(safe_bin_file.to_path_buf()),
-            safe_version: Some(Version::new(0, 75, 1)),
+            autonomi_path: Some(safe_bin_file.to_path_buf()),
+            autonomi_version: Some(Version::new(0, 75, 1)),
             safenode_path: Some(safenode_bin_file.to_path_buf()),
             safenode_version: Some(Version::new(0, 75, 2)),
             safenode_manager_path: Some(safenode_manager_bin_file.to_path_buf()),
@@ -805,8 +803,8 @@ mod test {
 
         settings_file.assert(predicates::path::is_file());
         let settings = Settings::read(&settings_file.to_path_buf())?;
-        assert_eq!(settings.safe_path, Some(safe_bin_file.to_path_buf()));
-        assert_eq!(settings.safe_version, Some(Version::new(0, 75, 1)));
+        assert_eq!(settings.autonomi_path, Some(safe_bin_file.to_path_buf()));
+        assert_eq!(settings.autonomi_version, Some(Version::new(0, 75, 1)));
         assert_eq!(
             settings.safenode_path,
             Some(safenode_bin_file.to_path_buf())
@@ -832,7 +830,7 @@ mod test {
                 .join("dirs")
                 .join("safeup.json"),
         );
-        let safe_bin_file = tmp_data_path.child(SAFE_BIN_NAME);
+        let safe_bin_file = tmp_data_path.child(AUTONOMI_BIN_NAME);
         safe_bin_file.write_binary(b"fake safe code")?;
         let safenode_bin_file = tmp_data_path.child("safenode");
         safenode_bin_file.write_binary(b"fake safenode code")?;
@@ -842,8 +840,8 @@ mod test {
         testnet_bin_file.write_binary(b"fake testnet code")?;
 
         let settings = Settings {
-            safe_path: Some(safe_bin_file.to_path_buf()),
-            safe_version: Some(Version::new(0, 75, 1)),
+            autonomi_path: Some(safe_bin_file.to_path_buf()),
+            autonomi_version: Some(Version::new(0, 75, 1)),
             safenode_path: Some(safenode_bin_file.to_path_buf()),
             safenode_version: Some(Version::new(0, 75, 2)),
             safenode_manager_path: Some(safenode_manager_bin_file.to_path_buf()),
@@ -854,8 +852,8 @@ mod test {
 
         settings_file.assert(predicates::path::is_file());
         let settings = Settings::read(&settings_file.to_path_buf())?;
-        assert_eq!(settings.safe_path, Some(safe_bin_file.to_path_buf()));
-        assert_eq!(settings.safe_version, Some(Version::new(0, 75, 1)));
+        assert_eq!(settings.autonomi_path, Some(safe_bin_file.to_path_buf()));
+        assert_eq!(settings.autonomi_version, Some(Version::new(0, 75, 1)));
         assert_eq!(
             settings.safenode_path,
             Some(safenode_bin_file.to_path_buf())

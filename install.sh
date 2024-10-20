@@ -92,8 +92,8 @@ function install_safeup() {
   else
     target_dir="$HOME/.local/bin"
     mkdir -p "$target_dir"
-    mkdir -p "$HOME/.config/safe"
-    cat << 'EOF' > ~/.config/safe/env
+    mkdir -p "$HOME/.config/autonomi"
+    cat << 'EOF' > ~/.config/autonomi/env
 #!/bin/sh
 case ":${PATH}:" in
     *:"$HOME/.local/bin":*)
@@ -103,7 +103,7 @@ case ":${PATH}:" in
         ;;
 esac
 EOF
-  echo "source $HOME/.config/safe/env" >> "$HOME/.bashrc"
+  echo "source $HOME/.config/autonomi/env" >> "$HOME/.bashrc"
   fi
 
   temp_dir=$(mktemp -d)
@@ -129,7 +129,7 @@ function post_install() {
   else
     printf "\n"
     echo "The safeup binary has been installed, but it's not available in this session."
-    echo "You must either run 'source ~/.config/safe/env' in this session, or start a new session."
+    echo "You must either run 'source ~/.config/autonomi/env' in this session, or start a new session."
     echo "When safeup is available, please run 'safeup --help' to see how to install network components."
   fi
 }

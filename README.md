@@ -18,9 +18,9 @@ Otherwise:
 curl -sSL https://raw.githubusercontent.com/maidsafe/safeup/main/install.sh | bash
 ```
 
-This process will download and install `safeup` for your platform, then run it to have it install the `safe` client binary.
+This process will download and install `safeup` for your platform.
 
-The install script also accepts two flag arguments, namely `--client` and `--node`. If either are used, the script will invoke the installed `safeup` binary to install `safe` and `safenode`, respectively, without having to run either as an additional post-install step.
+The install script also accepts two flag arguments, namely `--client` and `--node`. If either are used, the script will invoke the installed `safeup` binary to install `autonomi` and `safenode`, respectively, without having to run either as an additional post-install step.
 
 To use these options as `sudo`:
 ```
@@ -45,7 +45,7 @@ Therefore, installing any components on Windows is an additional post-safeup-ins
 
 ## Usage
 
-Use the `client`, `node` or `testnet` commands to install the latest versions of the `safe`, `safenode` or `testnet` binaries, respectively. 
+Use the `client`, `node` or `testnet` commands to install the latest versions of the `autonomi`, `safenode` or `testnet` binaries, respectively. 
 
 As above, you can choose to run `safeup` using `sudo`, depending on where you'd like your binaries installed. Again, this does not apply to Windows, where we don't support running with Administrator privileges.
 

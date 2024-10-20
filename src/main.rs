@@ -29,14 +29,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Install the safe client binary.
+    /// Install the autonomi client binary.
     ///
     /// The location is platform specific:
     /// - Linux/macOS: $HOME/.local/bin
-    /// - Windows: C:\Users\<username>\safe
+    /// - Windows: C:\Users\<username>\autonomi
     ///
     /// On Linux/macOS, the Bash shell profile will be modified to add $HOME/.local/bin to the PATH
-    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\safe.
+    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\autonomi.
     #[clap(verbatim_doc_comment)]
     Client {
         /// Override the default installation path.
@@ -57,10 +57,10 @@ enum Commands {
     ///
     /// The location is platform specific:
     /// - Linux/macOS: $HOME/.local/bin
-    /// - Windows: C:\Users\<username>\safe
+    /// - Windows: C:\Users\<username>\autonomi
     ///
     /// On Linux/macOS, the Bash shell profile will be modified to add $HOME/.local/bin to the PATH
-    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\safe.
+    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\autonomi.
     #[clap(verbatim_doc_comment)]
     Node {
         /// Override the default installation path.
@@ -81,10 +81,10 @@ enum Commands {
     ///
     /// The location is platform specific:
     /// - Linux/macOS: $HOME/.local/bin
-    /// - Windows: C:\Users\<username>\safe
+    /// - Windows: C:\Users\<username>\autonomi
     ///
     /// On Linux/macOS, the Bash shell profile will be modified to add $HOME/.local/bin to the PATH
-    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\safe.
+    /// variable. On Windows, the user Path variable will be modified to add C:\Users\<username>\autonomi.
     #[clap(verbatim_doc_comment)]
     NodeManager {
         /// Override the default installation path.
@@ -120,7 +120,7 @@ async fn main() -> Result<()> {
         }) => {
             println!("**************************************");
             println!("*                                    *");
-            println!("*          Installing safe           *");
+            println!("*        Installing autonomi         *");
             println!("*                                    *");
             println!("**************************************");
             install::check_prerequisites()?;

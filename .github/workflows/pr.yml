@@ -10,9 +10,9 @@ on: pull_request
 env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
-  CLIENT_VERSION: 0.94.0
-  NODE_VERSION: 0.110.0
-  NODE_MANAGER_VERSION: 0.10.1
+  CLIENT_VERSION: 0.1.1-rc.1
+  NODE_VERSION: 0.112.0-rc.1
+  NODE_MANAGER_VERSION: 0.11.0-rc.1
 
 jobs:
   # The code in this crate uses lots of conditional compilation for cross-platform capabilities.
@@ -146,15 +146,15 @@ jobs:
       - name: Check if binaries are available in new shell session
         shell: pwsh
         run: |
-          if (!(Test-Path "$env:USERPROFILE\safe\safe.exe")) {
-            Write-Host "safe.exe does not exist"
+          if (!(Test-Path "$env:USERPROFILE\autonomi\autonomi.exe")) {
+            Write-Host "autonomi.exe does not exist"
             exit 1
           }
-          if (!(Test-Path "$env:USERPROFILE\safe\safenode.exe")) {
+          if (!(Test-Path "$env:USERPROFILE\autonomi\safenode.exe")) {
             Write-Host "safenode.exe does not exist"
             exit 1
           }
-          if (!(Test-Path "$env:USERPROFILE\safe\safenode-manager.exe")) {
+          if (!(Test-Path "$env:USERPROFILE\autonomi\safenode-manager.exe")) {
             Write-Host "safenode-manager.exe does not exist"
             exit 1
           }
@@ -163,21 +163,21 @@ jobs:
           # being modified easily, so we need to refer to the binaries with their full paths.
           # Other manual testing has proven that the changes to the Path environment variable do
           # take effect.
-          $output = & "${env:USERPROFILE}\safe\safe.exe" --version
-          $version = $output | Select-String -Pattern "sn_cli (\d+\.\d+\.\d+)"
+          $output = & "${env:USERPROFILE}\autonomi\autonomi.exe" --version
+          $version = $output | Select-String -Pattern "autonomi-cli (\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[0-9]+)?)?)"
           $versionNumber = $version.Matches.Groups[1].Value
           if ($versionNumber -eq "$env:CLIENT_VERSION") {
-            Write-Host "The correct version of safe has been installed"
+            Write-Host "The correct version of autonomi has been installed"
           } else {
-            Write-Host "The correct version of safe has not been installed"
+            Write-Host "The correct version of autonomi has not been installed"
           Write-Host "We expected version $env:CLIENT_VERSION"
             Write-Host "The downloaded binary has $versionNumber"
             exit 1
           }
 
-          $output = & "${env:USERPROFILE}\safe\safenode.exe" --version
-          $version = $output | Select-String -Pattern "safenode cli (\d+\.\d+\.\d+)"
-          $versionNumber = $version.Matches.Groups[1].Value
+          $output = & "${env:USERPROFILE}\autonomi\safenode.exe" --version
+          $version = $output -split "`n" | Select-Object -First 1
+          $versionNumber = ($version -split "v")[1].Trim()
           if ($versionNumber -eq "$env:NODE_VERSION") {
             Write-Host "The correct version of safenode has been installed"
           } else {
@@ -187,9 +187,9 @@ jobs:
             exit 1
           }
 
-          $output = & "${env:USERPROFILE}\safe\safenode-manager.exe" --version
-          $version = $output | Select-String -Pattern "sn-node-manager (\d+\.\d+\.\d+)"
-          $versionNumber = $version.Matches.Groups[1].Value
+          $output = & "${env:USERPROFILE}\autonomi\safenode-manager.exe" --version
+          $version = $output -split "`n" | Select-Object -First 1
+          $versionNumber = ($version -split "v")[1].Trim()
           if ($versionNumber -eq "$env:NODE_MANAGER_VERSION") {
             Write-Host "The correct version of safenode-manager has been installed"
           } else {
@@ -226,23 +226,23 @@ jobs:
           # the test does prove that the env file modifies PATH correctly and
           # that the installs of the binaries are available from their local
           # locations.
-          source ~/.config/safe/env
+          source ~/.config/autonomi/env
 
-          [[ -f "$HOME/.local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
+          [[ -f "$HOME/.local/bin/autonomi" ]] || { echo "autonomi not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode-manager" ]] || { echo "safenode-manager not in expected location"; exit 1; }
 
-          version=$(safe --version | awk '{ print $2 }')
+          version=$(autonomi --version | awk '{ print $2 }')
           if [[ "$version" == "$CLIENT_VERSION" ]]; then
-            echo "The correct version of safe has been installed"
+            echo "The correct version of autonomi has been installed"
           else
-            echo "The correct version of safe has not been installed"
+            echo "The correct version of autonomi has not been installed"
             echo "We expected $CLIENT_VERSION"
             echo "The downloaded binary has $version"
             exit 1
           fi
 
-          version=$(safenode --version | awk '{ print $3 }')
+          version=$(safenode --version | head -n 1 | awk '{print $3}' | sed 's/^v//')
           if [[ "$version" == "$NODE_VERSION" ]]; then
             echo "The correct version of safenode has been installed"
           else
@@ -252,7 +252,7 @@ jobs:
             exit 1
           fi
 
-          version=$(safenode-manager --version | awk '{ print $2 }')
+          version=$(safenode-manager --version | head -n 1 | awk '{print $4}' | sed 's/^v//')
           if [[ "$version" == "$NODE_MANAGER_VERSION" ]]; then
             echo "The correct version of safenode-manager has been installed"
           else
@@ -281,23 +281,23 @@ jobs:
       - name: Check if binaries are available in new shell session
         run: |
           # As with the Ubuntu test, we need to source the env file to get the binaries on PATH.
-          source "/Users/runner/Library/Application Support/safe/env"
+          source "/Users/runner/Library/Application Support/autonomi/env"
 
-          [[ -f "$HOME/.local/bin/safe" ]] || { echo "safe not in expected location"; exit 1; }
+          [[ -f "$HOME/.local/bin/autonomi" ]] || { echo "autonomi not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode" ]] || { echo "safenode not in expected location"; exit 1; }
           [[ -f "$HOME/.local/bin/safenode-manager" ]] || { echo "safenode-manager not in expected location"; exit 1; }
 
-          version=$(safe --version | awk '{ print $2 }')
+          version=$(autonomi --version | awk '{ print $2 }')
           if [[ "$version" == "$CLIENT_VERSION" ]]; then
-            echo "The correct version of safe has been installed"
+            echo "The correct version of autonomi has been installed"
           else
-            echo "The correct version of safe has not been installed"
+            echo "The correct version of autonomi has not been installed"
             echo "We expected $CLIENT_VERSION"
             echo "The downloaded binary has $version"
             exit 1
           fi
 
-          version=$(safenode --version | awk '{ print $3 }')
+          version=$(safenode --version | head -n 1 | awk '{print $3}' | sed 's/^v//')
           if [[ "$version" == "$NODE_VERSION" ]]; then
             echo "The correct version of safenode has been installed"
           else
@@ -307,7 +307,7 @@ jobs:
             exit 1
           fi
 
-          version=$(safenode-manager --version | awk '{ print $2 }')
+          version=$(safenode-manager --version | head -n 1 | awk '{print $4}' | sed 's/^v//')
           if [[ "$version" == "$NODE_MANAGER_VERSION" ]]; then
             echo "The correct version of safenode-manager has been installed"
           else
@@ -331,3 +331,4 @@ jobs:
 
       - name: dry run publish
         run: cargo publish --dry-run
+

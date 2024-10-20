@@ -24,7 +24,7 @@ lazy_static! {
         let mut m = HashMap::new();
         m.insert(
             AssetType::Client,
-            "https://sn-cli.s3.eu-west-2.amazonaws.com",
+            "https://autonomi-cli.s3.eu-west-2.amazonaws.com",
         );
         m.insert(
             AssetType::Node,
@@ -44,7 +44,7 @@ pub(crate) async fn process_install_cmd(
     version: Option<String>,
     no_modify_shell_profile: bool,
 ) -> Result<()> {
-    let safe_config_dir_path = get_safe_config_dir_path()?;
+    let autonomi_config_dir_path = get_autonomi_config_dir_path()?;
     let dest_dir_path = if let Some(path) = custom_path {
         path
     } else {
@@ -62,7 +62,7 @@ pub(crate) async fn process_install_cmd(
         crate::install::configure_shell_profile(
             &dest_dir_path.clone(),
             &get_shell_profile_path()?,
-            &safe_config_dir_path.join("env"),
+            &autonomi_config_dir_path.join("env"),
         )
         .await?
     }
@@ -71,8 +71,8 @@ pub(crate) async fn process_install_cmd(
 }
 
 pub(crate) async fn process_update_cmd() -> Result<()> {
-    let safe_config_dir_path = get_safe_config_dir_path()?;
-    let settings_file_path = safe_config_dir_path.join("safeup.json");
+    let autonomi_config_dir_path = get_autonomi_config_dir_path()?;
+    let settings_file_path = autonomi_config_dir_path.join("safeup.json");
     let settings = Settings::read(&settings_file_path)?;
     let release_repo = <dyn SafeReleaseRepoActions>::default_config();
 
@@ -115,8 +115,8 @@ pub(crate) async fn process_update_cmd() -> Result<()> {
 }
 
 pub(crate) fn process_ls_command() -> Result<()> {
-    let safe_config_dir_path = get_safe_config_dir_path()?;
-    let settings_file_path = safe_config_dir_path.join("safeup.json");
+    let autonomi_config_dir_path = get_autonomi_config_dir_path()?;
+    let settings_file_path = autonomi_config_dir_path.join("safeup.json");
     let settings = Settings::read(&settings_file_path)?;
     let mut table = Table::new();
     table.add_row(Row::new(vec![
@@ -161,13 +161,13 @@ async fn do_install_binary(
     )
     .await?;
 
-    let safe_config_dir_path = get_safe_config_dir_path()?;
-    let settings_file_path = safe_config_dir_path.join("safeup.json");
+    let autonomi_config_dir_path = get_autonomi_config_dir_path()?;
+    let settings_file_path = autonomi_config_dir_path.join("safeup.json");
     let mut settings = Settings::read(&settings_file_path)?;
     match asset_type {
         AssetType::Client => {
-            settings.safe_path = Some(bin_path);
-            settings.safe_version = Some(installed_version);
+            settings.autonomi_path = Some(bin_path);
+            settings.autonomi_version = Some(installed_version);
         }
         AssetType::Node => {
             settings.safenode_path = Some(bin_path);
@@ -253,28 +253,28 @@ fn get_shell_profile_path() -> Result<PathBuf> {
     Ok(home_dir_path.join(profile_file_name))
 }
 
-fn get_safe_config_dir_path() -> Result<PathBuf> {
+fn get_autonomi_config_dir_path() -> Result<PathBuf> {
     let config_dir_path = dirs_next::config_dir()
         .ok_or_else(|| eyre!("Could not retrieve user's config directory"))?;
-    let safe_config_dir_path = config_dir_path.join("safe");
-    std::fs::create_dir_all(safe_config_dir_path.clone())?;
-    Ok(safe_config_dir_path)
+    let autonomi_config_dir_path = config_dir_path.join("autonomi");
+    std::fs::create_dir_all(autonomi_config_dir_path.clone())?;
+    Ok(autonomi_config_dir_path)
 }
 
 #[cfg(target_os = "windows")]
 fn get_default_install_path() -> Result<PathBuf> {
     let home_dir_path =
         dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
-    let safe_dir_path = home_dir_path.join("safe");
-    std::fs::create_dir_all(safe_dir_path.clone())?;
-    Ok(safe_dir_path)
+    let autonomi_dir_path = home_dir_path.join("autonomi");
+    std::fs::create_dir_all(autonomi_dir_path.clone())?;
+    Ok(autonomi_dir_path)
 }
 
 #[cfg(target_family = "unix")]
 fn get_default_install_path() -> Result<PathBuf> {
     let home_dir_path =
         dirs_next::home_dir().ok_or_else(|| eyre!("Could not retrieve user's home directory"))?;
-    let safe_dir_path = home_dir_path.join(".local").join("bin");
-    std::fs::create_dir_all(safe_dir_path.clone())?;
-    Ok(safe_dir_path)
+    let autonomi_dir_path = home_dir_path.join(".local").join("bin");
+    std::fs::create_dir_all(autonomi_dir_path.clone())?;
+    Ok(autonomi_dir_path)
 }

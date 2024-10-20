@@ -51,8 +51,8 @@ mod test {
     #[test]
     fn perform_upgrade_assessment_should_indicate_no_previous_installation() -> Result<()> {
         let settings = Settings {
-            safe_path: None,
-            safe_version: None,
+            autonomi_path: None,
+            autonomi_version: None,
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
             safenode_version: Some(Version::new(0, 83, 13)),
             safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
@@ -63,8 +63,8 @@ mod test {
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
 
         let settings = Settings {
-            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
-            safe_version: Some(Version::new(0, 78, 26)),
+            autonomi_path: Some(PathBuf::from("/home/user/.local/autonomi")),
+            autonomi_version: Some(Version::new(0, 78, 26)),
             safenode_path: None,
             safenode_version: None,
             safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
@@ -75,8 +75,8 @@ mod test {
         assert_matches!(decision, UpdateAssessmentResult::NoPreviousInstallation);
 
         let settings = Settings {
-            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
-            safe_version: Some(Version::new(0, 78, 26)),
+            autonomi_path: Some(PathBuf::from("/home/user/.local/autonomi")),
+            autonomi_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
             safenode_version: Some(Version::new(0, 83, 13)),
             safenode_manager_path: None,
@@ -92,8 +92,8 @@ mod test {
     #[test]
     fn perform_upgrade_assessment_should_indicate_we_are_at_latest_version() -> Result<()> {
         let settings = Settings {
-            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
-            safe_version: Some(Version::new(0, 78, 26)),
+            autonomi_path: Some(PathBuf::from("/home/user/.local/autonomi")),
+            autonomi_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
             safenode_version: Some(Version::new(0, 83, 13)),
             safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
@@ -119,8 +119,8 @@ mod test {
     fn perform_upgrade_assessment_latest_version_is_less_than_current_should_return_error(
     ) -> Result<()> {
         let settings = Settings {
-            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
-            safe_version: Some(Version::new(0, 78, 26)),
+            autonomi_path: Some(PathBuf::from("/home/user/.local/autonomi")),
+            autonomi_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
             safenode_version: Some(Version::new(0, 83, 13)),
             safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
@@ -164,8 +164,8 @@ mod test {
     fn perform_upgrade_assessment_should_perform_update_when_latest_patch_version_is_greater(
     ) -> Result<()> {
         let settings = Settings {
-            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
-            safe_version: Some(Version::new(0, 78, 26)),
+            autonomi_path: Some(PathBuf::from("/home/user/.local/autonomi")),
+            autonomi_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
             safenode_version: Some(Version::new(0, 83, 13)),
             safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
@@ -191,8 +191,8 @@ mod test {
     fn perform_upgrade_assessment_should_perform_update_when_latest_minor_version_is_greater(
     ) -> Result<()> {
         let settings = Settings {
-            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
-            safe_version: Some(Version::new(0, 78, 26)),
+            autonomi_path: Some(PathBuf::from("/home/user/.local/autonomi")),
+            autonomi_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
             safenode_version: Some(Version::new(0, 83, 13)),
             safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
@@ -218,8 +218,8 @@ mod test {
     fn perform_upgrade_assessment_should_perform_update_when_latest_major_version_is_greater(
     ) -> Result<()> {
         let settings = Settings {
-            safe_path: Some(PathBuf::from("/home/chris/.local/safe")),
-            safe_version: Some(Version::new(0, 78, 26)),
+            autonomi_path: Some(PathBuf::from("/home/user/.local/autonomi")),
+            autonomi_version: Some(Version::new(0, 78, 26)),
             safenode_path: Some(PathBuf::from("/home/chris/.local/bin/safenode")),
             safenode_version: Some(Version::new(0, 83, 13)),
             safenode_manager_path: Some(PathBuf::from("/home/chris/.local/bin/safenode-manager")),
