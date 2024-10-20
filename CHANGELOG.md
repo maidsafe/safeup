@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0](https://github.com/maidsafe/safeup/compare/v0.7.0...v0.8.0) - 2024-10-20
+
+### Added
+- `client` cmd now uses the `autonomi` binary
+- add `aarch64-apple-darwin` release binaries
+- add `aarch64-apple-darwin` support
+
+### Fixed
+- *(test)* impl `download_winsw`
+
+### Other
+- remove unused dependency
+- *(workflow)* update node manager version to `0.10.1`
+- *(workflow)* update node version to `0.110.0`
+- *(workflow)* update client version to `0.94.0`
+- *(fmt)* formatting
+
 ## [0.7.0](https://github.com/maidsafe/safeup/compare/v0.6.0...v0.7.0) - 2024-03-21
 
 ### Other

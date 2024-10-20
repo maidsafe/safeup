@@ -39,6 +39,10 @@ build-release-artifacts arch:
     rustup target add x86_64-unknown-linux-musl
   fi
 
+  if [[ "$arch" == "x86_64-apple-darwin" || "$arch" == "aarch64-apple-darwin" ]]; then
+    rustup target add "$arch"
+  fi
+
   rm -rf artifacts
   mkdir artifacts
   cargo clean
